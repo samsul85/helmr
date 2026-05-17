@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 // ============ CONFIG ============
 // 🚨 REPLACE THIS with your real Formspree endpoint after signing up at formspree.io
-const FORMSPREE_ENDPOINT = ' https://formspree.io/f/mredzlyn';
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/https://formspree.io/f/mredzlyn ;
 
 const eventTypes = [
   { id: 'trip', icon: '✈️', label: 'Trip', expenses: ['Hotel', 'Flights', 'Excursions', 'Meals', 'Transport'] },
