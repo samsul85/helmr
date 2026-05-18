@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 
 // ============ CONFIG ============
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mredzlyn';
+const LS_KEY = 'helmr.events.v1';
 
 const eventTypes = [
   { id: 'trip', icon: '✈️', label: 'Trip', expenses: ['Hotel', 'Flights', 'Excursions', 'Meals', 'Transport'] },
@@ -26,12 +27,37 @@ const statusStyles = {
   declined:  { bg: '#fcebeb', fg: '#791f1f' },
 };
 
-// Generate guest IDs client-side for new people (server validates/keeps on save)
 function newGuestId() {
   return 'g' + Math.random().toString(36).slice(2, 9);
 }
 
-// ============ STYLES ============
+function loadSavedEvents() {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(LS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+
+function saveEventToLocal(entry) {
+  if (typeof window === 'undefined') return;
+  try {
+    const existing = loadSavedEvents().filter(e => e.id !== entry.id);
+    const updated = [entry, ...existing].slice(0, 10);
+    window.localStorage.setItem(LS_KEY, JSON.stringify(updated));
+  } catch {}
+}
+
+function removeEventFromLocal(id) {
+  if (typeof window === 'undefined') return;
+  try {
+    const updated = loadSavedEvents().filter(e => e.id !== id);
+    window.localStorage.setItem(LS_KEY, JSON.stringify(updated));
+  } catch {}
+}
+
 const S = {
   page: { minHeight: '100vh', background: '#f5f3ee', padding: '12px', boxSizing: 'border-box' },
   frame: { maxWidth: '420px', margin: '0 auto', background: 'white', borderRadius: '20px', minHeight: '85vh', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' },
@@ -51,7 +77,6 @@ const S = {
   modal: { background: 'white', borderRadius: '16px', padding: '20px', maxWidth: '420px', width: '100%' },
 };
 
-// ============ FEEDBACK MODAL ============
 function FeedbackModal({ open, onClose, currentScreen }) {
   const [verdict, setVerdict] = useState('');
   const [comment, setComment] = useState('');
@@ -129,7 +154,6 @@ function FeedbackModal({ open, onClose, currentScreen }) {
   );
 }
 
-// ============ SHARE MODAL ============
 function ShareModal({ open, onClose, event }) {
   const [copiedId, setCopiedId] = useState(null);
   if (!open || !event) return null;
@@ -144,7 +168,6 @@ function ShareModal({ open, onClose, event }) {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 1500);
     } catch {
-      // fallback for older browsers
       const ta = document.createElement('textarea');
       ta.value = text;
       document.body.appendChild(ta);
@@ -158,7 +181,7 @@ function ShareModal({ open, onClose, event }) {
     <div style={S.modalOverlay} onClick={onClose}>
       <div style={{ ...S.modal, maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 4px' }}>Share invite links</h3>
-        <p style={{ margin: '0 0 16px', color: '#666', fontSize: '13px' }}>Send each person their own link. You'll see when they view it.</p>
+        <p style={{ margin: '0 0 16px', color: '#666', fontSize: '13px' }}>Send each person their own link. You'll see when they view it and RSVP.</p>
 
         <div style={{ marginBottom: '14px', padding: '10px 12px', background: '#f5f3ee', borderRadius: '10px' }}>
           <div style={{ fontSize: '11px', color: '#777', marginBottom: '4px' }}>General link (anyone)</div>
@@ -182,7 +205,10 @@ function ShareModal({ open, onClose, event }) {
             <div key={g.id} style={{ ...S.card, marginBottom: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ fontSize: '14px', fontWeight: 500 }}>{g.name}</div>
-                {g.viewedAt && <span style={{ fontSize: '10px', color: '#085041', background: '#e1f5ee', padding: '2px 8px', borderRadius: '999px' }}>viewed</span>}
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {g.viewedAt && <span style={{ fontSize: '10px', color: '#085041', background: '#e1f5ee', padding: '2px 8px', borderRadius: '999px' }}>viewed</span>}
+                  {g.status && g.status !== 'invited' && <span style={{ fontSize: '10px', color: statusStyles[g.status]?.fg, background: statusStyles[g.status]?.bg, padding: '2px 8px', borderRadius: '999px' }}>{g.status}</span>}
+                </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ flex: 1, fontFamily: 'monospace', fontSize: '11px', color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link}</div>
@@ -200,7 +226,6 @@ function ShareModal({ open, onClose, event }) {
   );
 }
 
-// ============ MAIN APP ============
 export default function Helmr() {
   const [screen, setScreen] = useState('welcome');
   const [eventId, setEventId] = useState(null);
@@ -215,18 +240,57 @@ export default function Helmr() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const [organizerName, setOrganizerName] = useState('');
+  const [organizerEmail, setOrganizerEmail] = useState('');
   const [people, setPeople] = useState([
     { id: 'organizer', name: 'You', status: 'paid', role: 'organizer' },
   ]);
   const [expenses, setExpenses] = useState([]);
 
+  const [savedEvents, setSavedEvents] = useState([]);
+  useEffect(() => { setSavedEvents(loadSavedEvents()); }, []);
+
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   const confirmed = people.filter(p => p.status === 'confirmed' || p.status === 'paid').length;
   const perPerson = confirmed > 0 ? Math.round((total + Number(tip)) / confirmed) : 0;
 
-  // Auto-save on dashboard when state changes (debounced)
+  const resumeEvent = async (id) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/events/${id}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          alert('That event has expired or was deleted.');
+          removeEventFromLocal(id);
+          setSavedEvents(loadSavedEvents());
+        } else {
+          alert("Couldn't load event.");
+        }
+        return;
+      }
+      const data = await res.json();
+      setEventId(data.id);
+      setEventType(data.eventType || null);
+      setEventName(data.eventName || '');
+      setEventDate(data.eventDate || '');
+      setEventLoc(data.eventLoc || '');
+      setDateTBD(!!data.dateTBD);
+      setLocTBD(!!data.locTBD);
+      setOrganizerName(data.organizerName || '');
+      setOrganizerEmail(data.organizerEmail || '');
+      setPeople(data.people || [{ id: 'organizer', name: 'You', status: 'paid', role: 'organizer' }]);
+      setExpenses(data.expenses || []);
+      setTip(Number(data.tip) || 0);
+      setScreen('dashboard');
+    } catch {
+      alert("Couldn't load event.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const saveTimerRef = useRef(null);
   useEffect(() => {
     if (!eventId || screen !== 'dashboard') return;
@@ -239,9 +303,10 @@ export default function Helmr() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             eventName, eventDate, eventLoc, dateTBD, locTBD,
-            organizerName, people, expenses, tip: Number(tip) || 0,
+            organizerName, organizerEmail, people, expenses, tip: Number(tip) || 0,
           }),
         });
+        if (eventId) saveEventToLocal({ id: eventId, name: eventName || 'Untitled event', updatedAt: Date.now() });
       } catch (e) {
         console.error('Save failed', e);
       } finally {
@@ -249,23 +314,30 @@ export default function Helmr() {
       }
     }, 800);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, people, expenses, tip]);
+  }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, organizerEmail, people, expenses, tip]);
 
-  // Refresh event data periodically when share modal is open (to pick up "viewed" updates)
   useEffect(() => {
-    if (!shareOpen || !eventId) return;
+    if (!eventId || screen !== 'dashboard') return;
+    let cancelled = false;
     const tick = async () => {
       try {
         const r = await fetch(`/api/events/${eventId}`);
-        if (!r.ok) return;
+        if (!r.ok || cancelled) return;
         const data = await r.json();
-        if (data && data.people) setPeople(data.people);
+        if (data && Array.isArray(data.people)) {
+          setPeople(prev => {
+            const byId = new Map(prev.map(p => [p.id, p]));
+            return data.people.map(sp => {
+              const cp = byId.get(sp.id);
+              return cp ? { ...sp, name: cp.name || sp.name } : sp;
+            });
+          });
+        }
       } catch {}
     };
-    tick();
-    const interval = setInterval(tick, 4000);
-    return () => clearInterval(interval);
-  }, [shareOpen, eventId]);
+    const interval = setInterval(tick, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [eventId, screen]);
 
   const pickType = (id) => {
     setEventType(id);
@@ -282,7 +354,6 @@ export default function Helmr() {
     }));
   };
 
-  // Create event on the server, then go to dashboard
   const goToDashboard = async () => {
     try {
       setSaving(true);
@@ -291,12 +362,14 @@ export default function Helmr() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           eventType, eventName, eventDate, eventLoc, dateTBD, locTBD,
-          organizerName, people, expenses, tip: Number(tip) || 0,
+          organizerName, organizerEmail, people, expenses, tip: Number(tip) || 0,
         }),
       });
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
       setEventId(data.id);
+      saveEventToLocal({ id: data.id, name: eventName || 'Untitled event', updatedAt: Date.now() });
+      setSavedEvents(loadSavedEvents());
       setScreen('dashboard');
     } catch (e) {
       alert("Couldn't save event — please try again.");
@@ -305,15 +378,30 @@ export default function Helmr() {
     }
   };
 
-  // ===== SCREENS =====
   const renderScreen = () => {
     if (screen === 'welcome') return (
-      <div style={{ padding: '60px 20px', textAlign: 'center' }}>
+      <div style={{ padding: '40px 20px', textAlign: 'center' }}>
         <div style={{ fontSize: '52px', marginBottom: '8px' }}>⚓</div>
         <h1 style={{ fontSize: '32px', margin: '8px 0 4px', fontWeight: 500 }}>Helmr</h1>
-        <p style={{ fontSize: '15px', color: '#666', margin: '0 0 32px' }}>Take the helm of your next group plan</p>
-        <button style={{ ...S.btn, ...S.btnPrimary, marginBottom: '10px' }} onClick={() => setScreen('chooseType')}>Plan something</button>
-        <p style={{ fontSize: '11px', color: '#999', marginTop: '24px' }}>Prototype — events saved for 90 days</p>
+        <p style={{ fontSize: '15px', color: '#666', margin: '0 0 24px' }}>Take the helm of your next group plan</p>
+
+        {savedEvents.length > 0 && (
+          <div style={{ textAlign: 'left', marginBottom: '24px' }}>
+            <div style={{ fontSize: '11px', color: '#999', letterSpacing: '0.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Your events</div>
+            {savedEvents.map(ev => (
+              <div key={ev.id} style={{ ...S.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: loading ? 'wait' : 'pointer' }} onClick={() => !loading && resumeEvent(ev.id)}>
+                <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.name}</div>
+                  <div style={{ fontSize: '11px', color: '#999', fontFamily: 'monospace' }}>{ev.id}</div>
+                </div>
+                <button style={{ ...S.btnGhost, fontSize: '11px', padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); if (confirm(`Remove "${ev.name}" from this device? (The event itself isn't deleted.)`)) { removeEventFromLocal(ev.id); setSavedEvents(loadSavedEvents()); } }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button style={{ ...S.btn, ...S.btnPrimary, marginBottom: '10px' }} onClick={() => setScreen('chooseType')}>Plan something new</button>
+        <p style={{ fontSize: '11px', color: '#999', marginTop: '16px' }}>Prototype — events saved for 90 days</p>
       </div>
     );
 
@@ -343,18 +431,28 @@ export default function Helmr() {
         <div style={{ padding: '20px' }}>
           <button style={S.btnGhost} onClick={() => setScreen('chooseType')}>← Back</button>
           <h2 style={{ fontSize: '22px', margin: '8px 0 16px', fontWeight: 500 }}>{t.icon} {t.label} details</h2>
+
           <label style={S.label}>Your name</label>
           <input style={S.input} placeholder="e.g. Sam" value={organizerName} onChange={e => updateOrganizerName(e.target.value)} />
           <div style={{ height: '14px' }} />
+
+          <label style={S.label}>Your Interac e-Transfer email</label>
+          <input style={S.input} type="email" placeholder="e.g. you@example.com" value={organizerEmail} onChange={e => setOrganizerEmail(e.target.value)} />
+          <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>This is where guests send their share</p>
+          <div style={{ height: '14px' }} />
+
           <label style={S.label}>Event name</label>
           <input style={S.input} placeholder="e.g. Layla's 30th" value={eventName} onChange={e => setEventName(e.target.value)} />
           <div style={{ height: '14px' }} />
+
           <label style={S.label}><input type="checkbox" checked={dateTBD} onChange={() => setDateTBD(!dateTBD)} style={{ marginRight: '4px' }} /> Date TBD</label>
           {!dateTBD && <input style={S.input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />}
           <div style={{ height: '14px' }} />
+
           <label style={S.label}><input type="checkbox" checked={locTBD} onChange={() => setLocTBD(!locTBD)} style={{ marginRight: '4px' }} /> Location TBD</label>
           {!locTBD && <input style={S.input} placeholder="Where?" value={eventLoc} onChange={e => setEventLoc(e.target.value)} />}
           <div style={{ height: '20px' }} />
+
           <button style={{ ...S.btn, ...S.btnPrimary, opacity: saving ? 0.6 : 1 }} disabled={saving} onClick={goToDashboard}>
             {saving ? 'Saving…' : 'Continue'}
           </button>
@@ -371,6 +469,7 @@ export default function Helmr() {
             </div>
             <h2 style={{ fontSize: '20px', margin: '2px 0 0', fontWeight: 500 }}>{eventName || 'Your event'}</h2>
           </div>
+          <button style={S.btnGhost} onClick={() => setScreen('welcome')}>← Home</button>
         </div>
         <div style={{ display: 'flex', borderBottom: '0.5px solid #eee', marginBottom: '14px' }}>
           {['overview', 'people', 'expenses', 'extras'].map(t => (
@@ -398,6 +497,11 @@ export default function Helmr() {
             </div>
             <button style={{ ...S.btn, ...S.btnPrimary, marginTop: '12px' }} onClick={() => setShareOpen(true)}>📋 Share invite links</button>
             <p style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>Event ID: {eventId}</p>
+            {!organizerEmail && (
+              <div style={{ ...S.card, marginTop: '12px', borderColor: '#f0c595', background: '#fdf6ec' }}>
+                <div style={{ fontSize: '13px', color: '#7a5320' }}>⚠️ Add your Interac email in the Extras tab so guests know where to send funds.</div>
+              </div>
+            )}
           </>
         )}
 
@@ -411,7 +515,7 @@ export default function Helmr() {
                     <div style={{ fontSize: '15px', fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.name}
                       {p.role === 'organizer' && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · organizer</span>}
-                      {p.viewedAt && p.role !== 'organizer' && <span style={{ fontSize: '11px', color: '#085041', fontWeight: 400 }}> · viewed 👀</span>}
+                      {p.viewedAt && p.role !== 'organizer' && <span style={{ fontSize: '11px', color: '#085041', fontWeight: 400 }}> · viewed</span>}
                     </div>
                     <span style={{ ...S.pill, background: c.bg, color: c.fg }} onClick={() => cycleStatus(p.id)}>{p.status}</span>
                     {p.role !== 'organizer' && (
@@ -428,7 +532,7 @@ export default function Helmr() {
               const n = prompt('Name?');
               if (n) setPeople([...people, { id: newGuestId(), name: n, status: 'invited' }]);
             }}>+ Add person</button>
-            <p style={{ fontSize: '11px', color: '#999', marginTop: '8px' }}>Tap a status to cycle through invited → confirmed → paid → declined</p>
+            <p style={{ fontSize: '11px', color: '#999', marginTop: '8px' }}>Guests can RSVP themselves from their link. Tap a status to manually override.</p>
           </>
         )}
 
@@ -453,6 +557,11 @@ export default function Helmr() {
 
         {tab === 'extras' && (
           <>
+            <div style={S.card}>
+              <div style={{ fontWeight: 500, marginBottom: '4px' }}>💸 Your Interac email</div>
+              <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Where guests send their share</p>
+              <input style={S.input} type="email" placeholder="you@example.com" value={organizerEmail} onChange={e => setOrganizerEmail(e.target.value)} />
+            </div>
             <div style={S.card}>
               <div style={{ fontWeight: 500, marginBottom: '4px' }}>🎩 Tip the planner</div>
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Optional add-on for the organizer's time</p>
