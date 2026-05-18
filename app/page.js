@@ -316,28 +316,44 @@ export default function Helmr() {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, organizerEmail, people, expenses, tip]);
 
+  // Poll for server-side guest changes (viewedAt, RSVP status)
+  // Only merge those specific fields — never replace the local people list
   useEffect(() => {
     if (!eventId || screen !== 'dashboard') return;
     let cancelled = false;
     const tick = async () => {
       try {
+        if (saving) return; // never reconcile while a save is in flight
         const r = await fetch(`/api/events/${eventId}`);
         if (!r.ok || cancelled) return;
         const data = await r.json();
-        if (data && Array.isArray(data.people)) {
-          setPeople(prev => {
-            const byId = new Map(prev.map(p => [p.id, p]));
-            return data.people.map(sp => {
-              const cp = byId.get(sp.id);
-              return cp ? { ...sp, name: cp.name || sp.name } : sp;
-            });
+        if (!data || !Array.isArray(data.people)) return;
+
+        setPeople(prev => {
+          const serverById = new Map(data.people.map(p => [p.id, p]));
+          // Walk local list; only merge server-managed fields where the local
+          // person exists on the server too. Local-only people (not yet saved)
+          // are preserved as-is.
+          return prev.map(local => {
+            const server = serverById.get(local.id);
+            if (!server) return local;
+            const merged = { ...local };
+            // Pull in server-managed fields only
+            if (server.viewedAt && !local.viewedAt) merged.viewedAt = server.viewedAt;
+            if (server.rsvpAt && server.rsvpAt !== local.rsvpAt) {
+              merged.rsvpAt = server.rsvpAt;
+              // Apply guest-driven status only if local hasn't been manually overridden
+              // (organizer can override via tap; server status reflects guest's last action)
+              merged.status = server.status;
+            }
+            return merged;
           });
-        }
+        });
       } catch {}
     };
     const interval = setInterval(tick, 5000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [eventId, screen]);
+  }, [eventId, screen, saving]);
 
   const pickType = (id) => {
     setEventType(id);
