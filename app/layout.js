@@ -1,3 +1,5 @@
+import { Analytics } from '@vercel/analytics/next';
+
 export const metadata = {
   title: 'Helmr — Take the helm of your next group plan',
   description: 'Plan group events. Collect funds upfront. No more chasing reimbursements.',
@@ -12,6 +14,7 @@ export default function RootLayout({ children }) {
       </head>
       <body style={{ margin: 0, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', background: '#f5f3ee', color: '#1a1a1a' }}>
         {children}
+        <Analytics />
       </body>
     </html>
   );
