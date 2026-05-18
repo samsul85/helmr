@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 // ============ CONFIG ============
 // 🚨 REPLACE THIS with your real Formspree endpoint after signing up at formspree.io
-const FORMSPREE_ENDPOINT = 'https://formspree.io/f/https://formspree.io/f/mredzlyn ;
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mredzlyn';
 
 const eventTypes = [
   { id: 'trip', icon: '✈️', label: 'Trip', expenses: ['Hotel', 'Flights', 'Excursions', 'Meals', 'Transport'] },
@@ -138,16 +138,11 @@ export default function Helmr() {
   const [tip, setTip] = useState(0);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
+  const [organizerName, setOrganizerName] = useState('');
   const [people, setPeople] = useState([
-    { id: 1, name: 'Sam (you)', status: 'paid', role: 'organizer' },
-    { id: 2, name: 'Layla', status: 'confirmed' },
-    { id: 3, name: 'Omar', status: 'invited' },
-    { id: 4, name: 'Yusuf', status: 'declined' },
+    { id: 1, name: 'You', status: 'paid', role: 'organizer' },
   ]);
-  const [expenses, setExpenses] = useState([
-    { id: 1, name: 'Venue rental', amount: 600 },
-    { id: 2, name: 'Catering', amount: 400 },
-  ]);
+  const [expenses, setExpenses] = useState([]);
 
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   const confirmed = people.filter(p => p.status === 'confirmed' || p.status === 'paid').length;
@@ -199,10 +194,17 @@ export default function Helmr() {
 
     if (screen === 'details') {
       const t = eventTypes.find(e => e.id === eventType);
+      const updateOrganizerName = (newName) => {
+        setOrganizerName(newName);
+        setPeople(people.map(p => p.role === 'organizer' ? { ...p, name: newName || 'You' } : p));
+      };
       return (
         <div style={{ padding: '20px' }}>
           <button style={S.btnGhost} onClick={() => setScreen('chooseType')}>← Back</button>
           <h2 style={{ fontSize: '22px', margin: '8px 0 16px', fontWeight: 500 }}>{t.icon} {t.label} details</h2>
+          <label style={S.label}>Your name</label>
+          <input style={S.input} placeholder="e.g. Sam" value={organizerName} onChange={e => updateOrganizerName(e.target.value)} />
+          <div style={{ height: '14px' }} />
           <label style={S.label}>Event name</label>
           <input style={S.input} placeholder="e.g. Layla's 30th" value={eventName} onChange={e => setEventName(e.target.value)} />
           <div style={{ height: '14px' }} />
@@ -260,15 +262,21 @@ export default function Helmr() {
               const c = statusStyles[p.status];
               return (
                 <div key={p.id} style={S.card}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 500 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.name}{p.role === 'organizer' && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · organizer</span>}
                     </div>
                     <span style={{ ...S.pill, background: c.bg, color: c.fg }} onClick={() => cycleStatus(p.id)}>{p.status}</span>
+                    {p.role !== 'organizer' && (
+                      <button style={{ ...S.btnGhost, padding: '4px' }} onClick={() => setPeople(people.filter(x => x.id !== p.id))} aria-label="Remove">🗑️</button>
+                    )}
                   </div>
                 </div>
               );
             })}
+            {people.length === 1 && (
+              <p style={{ fontSize: '12px', color: '#999', textAlign: 'center', padding: '12px 0' }}>Add the people you're inviting to your event.</p>
+            )}
             <button style={S.btn} onClick={() => {
               const n = prompt('Name?');
               if (n) setPeople([...people, { id: Date.now(), name: n, status: 'invited' }]);
