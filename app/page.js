@@ -253,7 +253,7 @@ export default function Helmr() {
   useEffect(() => { setSavedEvents(loadSavedEvents()); }, []);
 
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const confirmed = people.filter(p => p.status === 'confirmed' || p.status === 'paid').length;
+  const confirmed = people.filter(p => p.role === 'organizer' || p.status === 'confirmed' || p.status === 'paid').length;
   const perPerson = confirmed > 0 ? Math.round((total + Number(tip)) / confirmed) : 0;
 
   const resumeEvent = async (id) => {
@@ -280,7 +280,7 @@ export default function Helmr() {
       setLocTBD(!!data.locTBD);
       setOrganizerName(data.organizerName || '');
       setOrganizerEmail(data.organizerEmail || '');
-      setPeople(data.people || [{ id: 'organizer', name: 'You', status: 'paid', role: 'organizer' }]);
+      setPeople(data.people || [{ id: 'organizer', name: 'You', status: 'organizer', role: 'organizer' }]);
       setExpenses(data.expenses || []);
       setTip(Number(data.tip) || 0);
       setScreen('dashboard');
@@ -523,18 +523,21 @@ export default function Helmr() {
 
         {tab === 'people' && (
           <>
-            {people.map(p => {
+        {people.map(p => {
               const c = statusStyles[p.status];
+              const isOrganizer = p.role === 'organizer';
               return (
                 <div key={p.id} style={S.card}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                     <div style={{ fontSize: '15px', fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.name}
-                      {p.role === 'organizer' && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · organizer</span>}
-                      {p.viewedAt && p.role !== 'organizer' && <span style={{ fontSize: '11px', color: '#085041', fontWeight: 400 }}> · viewed</span>}
+                      {isOrganizer && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · organizer</span>}
+                      {p.viewedAt && !isOrganizer && <span style={{ fontSize: '11px', color: '#085041', fontWeight: 400 }}> · viewed</span>}
                     </div>
-                    <span style={{ ...S.pill, background: c.bg, color: c.fg }} onClick={() => cycleStatus(p.id)}>{p.status}</span>
-                    {p.role !== 'organizer' && (
+                    {!isOrganizer && (
+                      <span style={{ ...S.pill, background: c?.bg || '#eee', color: c?.fg || '#666' }} onClick={() => cycleStatus(p.id)}>{p.status}</span>
+                    )}
+                    {!isOrganizer && (
                       <button style={{ ...S.btnGhost, padding: '4px' }} onClick={() => setPeople(people.filter(x => x.id !== p.id))} aria-label="Remove">🗑️</button>
                     )}
                   </div>
