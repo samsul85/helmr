@@ -455,6 +455,31 @@ export default function Helmr() {
     setScreen('details');
   };
 
+  // Reset all event state so "Plan something new" starts from a clean slate.
+  // Without this, fields from the previously-open event leak into the new one.
+  const startNewEvent = () => {
+    setEventId(null);
+    setEventType(null);
+    setEventName('');
+    setEventDate('');
+    setEventLoc('');
+    setDateTBD(false);
+    setLocTBD(false);
+    setOrganizerEmail('');
+    // Keep organizerName — that's a "you" thing, not an event thing.
+    setMode('cost_split');
+    setInviteMode('personal');
+    setGoal(0);
+    setSuggestionAmount(0);
+    setSuggestionUnit('per person');
+    setViewCount(0);
+    setTip(0);
+    setExpenses([]);
+    setPeople([{ id: 'organizer', name: organizerName || 'You', status: 'paid', role: 'organizer' }]);
+    setTab('overview');
+    setScreen('chooseType');
+  };
+
   const cycleStatus = (id) => {
     const cycle = ['invited', 'confirmed', 'paid', 'declined'];
     setPeople(people.map(p => {
@@ -512,7 +537,7 @@ export default function Helmr() {
           </div>
         )}
 
-        <button style={{ ...S.btn, ...S.btnPrimary, marginBottom: '10px' }} onClick={() => setScreen('chooseType')}>Plan something new</button>
+        <button style={{ ...S.btn, ...S.btnPrimary, marginBottom: '10px' }} onClick={startNewEvent}>Plan something new</button>
         <p style={{ fontSize: '11px', color: '#999', marginTop: '16px' }}>Prototype — events saved for 90 days</p>
       </div>
     );
