@@ -162,6 +162,7 @@ function ShareModal({ open, onClose, event }) {
   const guests = (event.people || []).filter(p => p.role !== 'organizer');
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const eventBase = `${baseUrl}/e/${event.id}`;
+  const inviteMode = event.inviteMode || 'personal';
 
   const copy = async (text, id) => {
     try {
@@ -178,6 +179,56 @@ function ShareModal({ open, onClose, event }) {
     }
   };
 
+  // ============================================================
+  // BROADCAST MODE — one shared link
+  // ============================================================
+  if (inviteMode === 'broadcast') {
+    const verb = event.mode === 'open_pool' ? 'chip in' : 'join';
+    const ename = event.eventName || 'our event';
+    const msg = `You're invited to ${verb} for ${ename}. ${eventBase}`;
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    const smsUrl = `sms:?&body=${encodeURIComponent(msg)}`;
+
+    return (
+      <div style={S.modalOverlay} onClick={onClose}>
+        <div style={{ ...S.modal, maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+          <h3 style={{ margin: '0 0 4px' }}>Share the link</h3>
+          <p style={{ margin: '0 0 16px', color: '#666', fontSize: '13px' }}>
+            Post this in your group chat. Anyone with the link can join.
+          </p>
+
+          <div style={{ marginBottom: '14px', padding: '12px', background: '#f5f3ee', borderRadius: '10px' }}>
+            <div style={{ fontFamily: 'monospace', fontSize: '13px', wordBreak: 'break-all', marginBottom: '10px' }}>{eventBase}</div>
+            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={() => copy(eventBase, 'link')}>
+              {copiedId === 'link' ? '✓ Copied' : 'Copy link'}
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+            <a href={waUrl} target="_blank" rel="noopener noreferrer" style={{ ...S.btn, textDecoration: 'none', textAlign: 'center', color: '#1a1a1a', display: 'block' }}>
+              💬 WhatsApp
+            </a>
+            <a href={smsUrl} style={{ ...S.btn, textDecoration: 'none', textAlign: 'center', color: '#1a1a1a', display: 'block' }}>
+              📱 SMS
+            </a>
+          </div>
+          <button style={{ ...S.btn, marginBottom: '8px' }} onClick={() => copy(msg, 'msg')}>
+            {copiedId === 'msg' ? '✓ Copied' : 'Copy invite message'}
+          </button>
+
+          <p style={{ fontSize: '11px', color: '#999', textAlign: 'center', margin: '12px 0' }}>
+            You'll see contributors show up on your dashboard as they pledge.
+          </p>
+
+          <button style={S.btn} onClick={onClose}>Done</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================
+  // PERSONAL MODE — per-guest links
+  // ============================================================
   return (
     <div style={S.modalOverlay} onClick={onClose}>
       <div style={{ ...S.modal, maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
@@ -246,6 +297,8 @@ export default function Helmr() {
   const [organizerName, setOrganizerName] = useState('');
   const [organizerEmail, setOrganizerEmail] = useState('');
   const [mode, setMode] = useState('cost_split'); // 'cost_split' | 'open_pool'
+  const [inviteMode, setInviteMode] = useState('personal'); // 'personal' | 'broadcast'
+  const [viewCount, setViewCount] = useState(0);
   const [goal, setGoal] = useState(0);
   const [suggestionAmount, setSuggestionAmount] = useState(0);
   const [suggestionUnit, setSuggestionUnit] = useState('per person');
@@ -293,6 +346,8 @@ export default function Helmr() {
       setOrganizerName(data.organizerName || '');
       setOrganizerEmail(data.organizerEmail || '');
       setMode(data.mode === 'open_pool' ? 'open_pool' : 'cost_split');
+      setInviteMode(data.inviteMode === 'broadcast' ? 'broadcast' : 'personal');
+      setViewCount(Number(data.viewCount) || 0);
       setGoal(Number(data.goal) || 0);
       setSuggestionAmount(Number(data.suggestionAmount) || 0);
       setSuggestionUnit(data.suggestionUnit || 'per person');
@@ -320,7 +375,7 @@ export default function Helmr() {
           body: JSON.stringify({
             eventName, eventDate, eventLoc, dateTBD, locTBD,
             organizerName, organizerEmail,
-            mode, goal: Number(goal) || 0,
+            mode, inviteMode, goal: Number(goal) || 0,
             suggestionAmount: Number(suggestionAmount) || 0, suggestionUnit,
             people, expenses, tip: Number(tip) || 0,
           }),
@@ -333,10 +388,9 @@ export default function Helmr() {
       }
     }, 800);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, organizerEmail, mode, goal, suggestionAmount, suggestionUnit, people, expenses, tip]);
+  }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, organizerEmail, mode, inviteMode, goal, suggestionAmount, suggestionUnit, people, expenses, tip]);
 
-  // Poll for server-side guest changes (viewedAt, RSVP status)
-  // Only merge those specific fields — never replace the local people list
+  // Poll for server-side guest changes (viewedAt, RSVP status, broadcast signups, view counter)
   useEffect(() => {
     if (!eventId || screen !== 'dashboard') return;
     let cancelled = false;
@@ -348,29 +402,35 @@ export default function Helmr() {
         const data = await r.json();
         if (!data || !Array.isArray(data.people)) return;
 
+        // Pull view counter (used in broadcast mode)
+        if (typeof data.viewCount === 'number') setViewCount(data.viewCount);
+
         setPeople(prev => {
           const serverById = new Map(data.people.map(p => [p.id, p]));
-          // Walk local list; only merge server-managed fields where the local
-          // person exists on the server too. Local-only people (not yet saved)
-          // are preserved as-is.
-          return prev.map(local => {
+          const localIds = new Set(prev.map(p => p.id));
+
+          // First: walk local list and merge server-managed fields
+          const merged = prev.map(local => {
             const server = serverById.get(local.id);
             if (!server) return local;
-            const merged = { ...local };
-            // Pull in server-managed fields only
-            if (server.viewedAt && !local.viewedAt) merged.viewedAt = server.viewedAt;
+            const m = { ...local };
+            if (server.viewedAt && !local.viewedAt) m.viewedAt = server.viewedAt;
             if (server.rsvpAt && server.rsvpAt !== local.rsvpAt) {
-              merged.rsvpAt = server.rsvpAt;
-              // Apply guest-driven status only if local hasn't been manually overridden
-              // (organizer can override via tap; server status reflects guest's last action)
-              merged.status = server.status;
+              m.rsvpAt = server.rsvpAt;
+              m.status = server.status;
             }
-            // Open Pool: pick up guest contributions
             if (server.contributedAmount !== undefined && server.contributedAmount !== local.contributedAmount) {
-              merged.contributedAmount = server.contributedAmount;
+              m.contributedAmount = server.contributedAmount;
             }
-            return merged;
+            return m;
           });
+
+          // Then: append any server-only people (broadcast self-signups)
+          // marked with source='broadcast'. Don't touch organizer-added rows.
+          const additions = data.people.filter(p =>
+            !localIds.has(p.id) && p.source === 'broadcast' && p.role !== 'organizer'
+          );
+          return additions.length ? [...merged, ...additions] : merged;
         });
       } catch {}
     };
@@ -383,6 +443,10 @@ export default function Helmr() {
     const t = eventTypes.find(e => e.id === id);
     setExpenses((t.expenses || []).map((name, i) => ({ id: i + 1, name, amount: 0 })));
     setMode(t.defaultMode || 'cost_split');
+    // Default invite mode follows the payment mode:
+    // Open Pool → broadcast (one link, anyone chips in)
+    // Cost Split → personal (per-guest links for tracking)
+    setInviteMode(t.defaultMode === 'open_pool' ? 'broadcast' : 'personal');
     // Sensible defaults for the suggestion unit per type
     if (t.defaultMode === 'open_pool') {
       if (t.id === 'potluck') setSuggestionUnit('per kid');
@@ -408,7 +472,7 @@ export default function Helmr() {
         body: JSON.stringify({
           eventType, eventName, eventDate, eventLoc, dateTBD, locTBD,
           organizerName, organizerEmail,
-          mode, goal: Number(goal) || 0,
+          mode, inviteMode, goal: Number(goal) || 0,
           suggestionAmount: Number(suggestionAmount) || 0, suggestionUnit,
           people, expenses, tip: Number(tip) || 0,
         }),
@@ -503,6 +567,29 @@ export default function Helmr() {
               : "No pressure, no fixed share. Each person decides their contribution."}
           </p>
 
+          <label style={S.label}>How are you inviting people?</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '4px' }}>
+            <button
+              onClick={() => setInviteMode('personal')}
+              style={{ padding: '10px 8px', borderRadius: '10px', border: inviteMode === 'personal' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: inviteMode === 'personal' ? '#1a1a1a' : 'white', color: inviteMode === 'personal' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+            >
+              <div style={{ fontSize: '13px', fontWeight: 500 }}>Personal links</div>
+              <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>One link per guest, track who viewed</div>
+            </button>
+            <button
+              onClick={() => setInviteMode('broadcast')}
+              style={{ padding: '10px 8px', borderRadius: '10px', border: inviteMode === 'broadcast' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: inviteMode === 'broadcast' ? '#1a1a1a' : 'white', color: inviteMode === 'broadcast' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+            >
+              <div style={{ fontSize: '13px', fontWeight: 500 }}>One shared link</div>
+              <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>Post in a group chat, anyone can join</div>
+            </button>
+          </div>
+          <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 14px' }}>
+            {inviteMode === 'personal'
+              ? "Add your list of guests; each gets a unique link."
+              : "No need to add names upfront — people enter their own when they chip in."}
+          </p>
+
           <label style={S.label}>Your name</label>
           <input style={S.input} placeholder="e.g. Sam" value={organizerName} onChange={e => updateOrganizerName(e.target.value)} />
           <div style={{ height: '14px' }} />
@@ -590,14 +677,22 @@ export default function Helmr() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   <div style={S.card}>
-                    <div style={S.label}>Confirmed</div>
-                    <div style={{ fontSize: '18px', fontWeight: 500 }}>{confirmed} / {people.length}</div>
+                    <div style={S.label}>{inviteMode === 'broadcast' ? 'Confirmed' : 'Confirmed'}</div>
+                    <div style={{ fontSize: '18px', fontWeight: 500 }}>
+                      {inviteMode === 'broadcast' ? `${confirmed - 1}` : `${confirmed} / ${people.length}`}
+                    </div>
                   </div>
                   <div style={S.card}>
                     <div style={S.label}>Per person</div>
                     <div style={{ fontSize: '18px', fontWeight: 500 }}>${perPerson}</div>
                   </div>
                 </div>
+                {inviteMode === 'broadcast' && (
+                  <div style={{ ...S.card, marginTop: '8px' }}>
+                    <div style={S.label}>Link views</div>
+                    <div style={{ fontSize: '18px', fontWeight: 500 }}>{viewCount}</div>
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -614,23 +709,45 @@ export default function Helmr() {
                   )}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <div style={S.card}>
-                    <div style={S.label}>Contributed</div>
-                    <div style={{ fontSize: '18px', fontWeight: 500 }}>{contributorCount} / {inviteeCount}</div>
-                  </div>
-                  <div style={S.card}>
-                    <div style={S.label}>Suggested</div>
-                    <div style={{ fontSize: '18px', fontWeight: 500 }}>
-                      {Number(suggestionAmount) > 0 ? `$${Number(suggestionAmount)}` : '—'}
-                    </div>
-                    {Number(suggestionAmount) > 0 && (
-                      <div style={{ fontSize: '11px', color: '#999' }}>{suggestionUnit}</div>
-                    )}
-                  </div>
+                  {inviteMode === 'broadcast' ? (
+                    <>
+                      <div style={S.card}>
+                        <div style={S.label}>Link views</div>
+                        <div style={{ fontSize: '18px', fontWeight: 500 }}>{viewCount}</div>
+                      </div>
+                      <div style={S.card}>
+                        <div style={S.label}>Contributors</div>
+                        <div style={{ fontSize: '18px', fontWeight: 500 }}>{contributorCount}</div>
+                        {Number(suggestionAmount) > 0 && (
+                          <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
+                            Suggested ${Number(suggestionAmount)} {suggestionUnit}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={S.card}>
+                        <div style={S.label}>Contributed</div>
+                        <div style={{ fontSize: '18px', fontWeight: 500 }}>{contributorCount} / {inviteeCount}</div>
+                      </div>
+                      <div style={S.card}>
+                        <div style={S.label}>Suggested</div>
+                        <div style={{ fontSize: '18px', fontWeight: 500 }}>
+                          {Number(suggestionAmount) > 0 ? `$${Number(suggestionAmount)}` : '—'}
+                        </div>
+                        {Number(suggestionAmount) > 0 && (
+                          <div style={{ fontSize: '11px', color: '#999' }}>{suggestionUnit}</div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </>
             )}
-            <button style={{ ...S.btn, ...S.btnPrimary, marginTop: '12px' }} onClick={() => setShareOpen(true)}>📋 Share invite links</button>
+            <button style={{ ...S.btn, ...S.btnPrimary, marginTop: '12px' }} onClick={() => setShareOpen(true)}>
+              📋 {inviteMode === 'broadcast' ? 'Share the link' : 'Share invite links'}
+            </button>
             <p style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>Event ID: {eventId}</p>
             {!organizerEmail && (
               <div style={{ ...S.card, marginTop: '12px', borderColor: '#f0c595', background: '#fdf6ec' }}>
@@ -642,10 +759,16 @@ export default function Helmr() {
 
         {tab === 'people' && (
           <>
+            {inviteMode === 'broadcast' && (
+              <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px', padding: '8px 10px', background: '#f5f3ee', borderRadius: '8px' }}>
+                Contributors will show up here as people pledge from the shared link.
+              </p>
+            )}
         {people.map(p => {
               const c = statusStyles[p.status];
               const isOrganizer = p.role === 'organizer';
               const contributed = Number(p.contributedAmount) || 0;
+              const isBroadcastGuest = p.source === 'broadcast';
               return (
                 <div key={p.id} style={S.card}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
@@ -653,6 +776,7 @@ export default function Helmr() {
                       {p.name}
                       {isOrganizer && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · organizer</span>}
                       {p.viewedAt && !isOrganizer && <span style={{ fontSize: '11px', color: '#085041', fontWeight: 400 }}> · viewed</span>}
+                      {isBroadcastGuest && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · self-added</span>}
                     </div>
                     {!isOrganizer && mode === 'open_pool' && contributed > 0 && (
                       <span style={{ fontSize: '13px', fontWeight: 500, color: '#085041' }}>${contributed}</span>
@@ -670,14 +794,18 @@ export default function Helmr() {
                 </div>
               );
             })}
-            {people.length === 1 && (
+            {people.length === 1 && inviteMode === 'personal' && (
               <p style={{ fontSize: '12px', color: '#999', textAlign: 'center', padding: '12px 0' }}>Add the people you're inviting to your event.</p>
             )}
-            <button style={S.btn} onClick={() => {
-              const n = prompt('Name?');
-              if (n) setPeople([...people, { id: newGuestId(), name: n, status: 'invited' }]);
-            }}>+ Add person</button>
-            <p style={{ fontSize: '11px', color: '#999', marginTop: '8px' }}>Guests can RSVP themselves from their link. Tap a status to manually override.</p>
+            {inviteMode === 'personal' && (
+              <>
+                <button style={S.btn} onClick={() => {
+                  const n = prompt('Name?');
+                  if (n) setPeople([...people, { id: newGuestId(), name: n, status: 'invited' }]);
+                }}>+ Add person</button>
+                <p style={{ fontSize: '11px', color: '#999', marginTop: '8px' }}>Guests can RSVP themselves from their link. Tap a status to manually override.</p>
+              </>
+            )}
           </>
         )}
 
@@ -739,7 +867,7 @@ export default function Helmr() {
       <ShareModal
         open={shareOpen}
         onClose={() => setShareOpen(false)}
-        event={eventId ? { id: eventId, people } : null}
+        event={eventId ? { id: eventId, people, inviteMode, eventName, mode } : null}
       />
     </div>
   );
