@@ -7,17 +7,18 @@ const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mredzlyn';
 const LS_KEY = 'helmr.events.v1';
 
 const eventTypes = [
-  { id: 'trip', icon: '✈️', label: 'Trip', expenses: ['Hotel', 'Flights', 'Excursions', 'Meals', 'Transport'] },
-  { id: 'bday', icon: '🎂', label: 'Birthday', expenses: ['Venue', 'Cake', 'Decor', 'Catering', 'Gift'] },
-  { id: 'concert', icon: '🎵', label: 'Concert', expenses: ['Tickets', 'Transport', 'Pre-drinks', 'Food'] },
-  { id: 'golf', icon: '🏌️', label: 'Golf day', expenses: ['Green fees', 'Cart', 'Food', 'Prizes'] },
-  { id: 'dinner', icon: '🍽️', label: 'Dinner', expenses: ['Restaurant', 'Drinks', 'Dessert', 'Tip'] },
-  { id: 'bach', icon: '🎉', label: 'Bachelor/ette', expenses: ['Accommodation', 'Activities', 'Dinner', 'Drinks', 'Decor'] },
-  { id: 'offsite', icon: '🏢', label: 'Offsite', expenses: ['Venue', 'Accommodation', 'Activities', 'Catering', 'AV'] },
-  { id: 'grad', icon: '🎓', label: 'Graduation', expenses: ['Venue', 'Catering', 'Photographer', 'Decor'] },
-  { id: 'gift', icon: '🎁', label: 'Group gift', expenses: ['Main gift', 'Card', 'Wrapping'] },
-  { id: 'beach', icon: '🏖️', label: 'Beach day', expenses: ['Rental', 'Food', 'Drinks', 'Equipment'] },
-  { id: 'other', icon: '➕', label: 'Other', expenses: [] },
+  { id: 'trip', icon: '✈️', label: 'Trip', expenses: ['Hotel', 'Flights', 'Excursions', 'Meals', 'Transport'], defaultMode: 'cost_split' },
+  { id: 'bday', icon: '🎂', label: 'Birthday', expenses: ['Venue', 'Cake', 'Decor', 'Catering', 'Gift'], defaultMode: 'cost_split' },
+  { id: 'concert', icon: '🎵', label: 'Concert', expenses: ['Tickets', 'Transport', 'Pre-drinks', 'Food'], defaultMode: 'cost_split' },
+  { id: 'golf', icon: '🏌️', label: 'Golf day', expenses: ['Green fees', 'Cart', 'Food', 'Prizes'], defaultMode: 'cost_split' },
+  { id: 'dinner', icon: '🍽️', label: 'Dinner', expenses: ['Restaurant', 'Drinks', 'Dessert', 'Tip'], defaultMode: 'cost_split' },
+  { id: 'bach', icon: '🎉', label: 'Bachelor/ette', expenses: ['Accommodation', 'Activities', 'Dinner', 'Drinks', 'Decor'], defaultMode: 'cost_split' },
+  { id: 'offsite', icon: '🏢', label: 'Offsite', expenses: ['Venue', 'Accommodation', 'Activities', 'Catering', 'AV'], defaultMode: 'cost_split' },
+  { id: 'grad', icon: '🎓', label: 'Graduation', expenses: ['Venue', 'Catering', 'Photographer', 'Decor'], defaultMode: 'cost_split' },
+  { id: 'gift', icon: '🎁', label: 'Group gift', expenses: ['Main gift', 'Card', 'Wrapping'], defaultMode: 'open_pool' },
+  { id: 'potluck', icon: '🥗', label: 'Potluck / Class fund', expenses: [], defaultMode: 'open_pool' },
+  { id: 'beach', icon: '🏖️', label: 'Beach day', expenses: ['Rental', 'Food', 'Drinks', 'Equipment'], defaultMode: 'cost_split' },
+  { id: 'other', icon: '➕', label: 'Other', expenses: [], defaultMode: 'cost_split' },
 ];
 
 const statusStyles = {
@@ -244,6 +245,10 @@ export default function Helmr() {
 
   const [organizerName, setOrganizerName] = useState('');
   const [organizerEmail, setOrganizerEmail] = useState('');
+  const [mode, setMode] = useState('cost_split'); // 'cost_split' | 'open_pool'
+  const [goal, setGoal] = useState(0);
+  const [suggestionAmount, setSuggestionAmount] = useState(0);
+  const [suggestionUnit, setSuggestionUnit] = useState('per person');
   const [people, setPeople] = useState([
     { id: 'organizer', name: 'You', status: 'paid', role: 'organizer' },
   ]);
@@ -255,6 +260,13 @@ export default function Helmr() {
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   const confirmed = people.filter(p => p.role === 'organizer' || p.status === 'confirmed' || p.status === 'paid').length;
   const perPerson = confirmed > 0 ? Math.round((total + Number(tip)) / confirmed) : 0;
+
+  // Open Pool: pooled total = sum of guest contributions
+  const pooledTotal = people
+    .filter(p => p.role !== 'organizer')
+    .reduce((s, p) => s + (Number(p.contributedAmount) || 0), 0);
+  const contributorCount = people.filter(p => p.role !== 'organizer' && Number(p.contributedAmount) > 0).length;
+  const inviteeCount = people.filter(p => p.role !== 'organizer').length;
 
   const resumeEvent = async (id) => {
     setLoading(true);
@@ -280,6 +292,10 @@ export default function Helmr() {
       setLocTBD(!!data.locTBD);
       setOrganizerName(data.organizerName || '');
       setOrganizerEmail(data.organizerEmail || '');
+      setMode(data.mode === 'open_pool' ? 'open_pool' : 'cost_split');
+      setGoal(Number(data.goal) || 0);
+      setSuggestionAmount(Number(data.suggestionAmount) || 0);
+      setSuggestionUnit(data.suggestionUnit || 'per person');
       setPeople(data.people || [{ id: 'organizer', name: 'You', status: 'organizer', role: 'organizer' }]);
       setExpenses(data.expenses || []);
       setTip(Number(data.tip) || 0);
@@ -303,7 +319,10 @@ export default function Helmr() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             eventName, eventDate, eventLoc, dateTBD, locTBD,
-            organizerName, organizerEmail, people, expenses, tip: Number(tip) || 0,
+            organizerName, organizerEmail,
+            mode, goal: Number(goal) || 0,
+            suggestionAmount: Number(suggestionAmount) || 0, suggestionUnit,
+            people, expenses, tip: Number(tip) || 0,
           }),
         });
         if (eventId) saveEventToLocal({ id: eventId, name: eventName || 'Untitled event', updatedAt: Date.now() });
@@ -314,7 +333,7 @@ export default function Helmr() {
       }
     }, 800);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, organizerEmail, people, expenses, tip]);
+  }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, organizerEmail, mode, goal, suggestionAmount, suggestionUnit, people, expenses, tip]);
 
   // Poll for server-side guest changes (viewedAt, RSVP status)
   // Only merge those specific fields — never replace the local people list
@@ -346,6 +365,10 @@ export default function Helmr() {
               // (organizer can override via tap; server status reflects guest's last action)
               merged.status = server.status;
             }
+            // Open Pool: pick up guest contributions
+            if (server.contributedAmount !== undefined && server.contributedAmount !== local.contributedAmount) {
+              merged.contributedAmount = server.contributedAmount;
+            }
             return merged;
           });
         });
@@ -359,6 +382,12 @@ export default function Helmr() {
     setEventType(id);
     const t = eventTypes.find(e => e.id === id);
     setExpenses((t.expenses || []).map((name, i) => ({ id: i + 1, name, amount: 0 })));
+    setMode(t.defaultMode || 'cost_split');
+    // Sensible defaults for the suggestion unit per type
+    if (t.defaultMode === 'open_pool') {
+      if (t.id === 'potluck') setSuggestionUnit('per kid');
+      else setSuggestionUnit('per person');
+    }
     setScreen('details');
   };
 
@@ -378,7 +407,10 @@ export default function Helmr() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           eventType, eventName, eventDate, eventLoc, dateTBD, locTBD,
-          organizerName, organizerEmail, people, expenses, tip: Number(tip) || 0,
+          organizerName, organizerEmail,
+          mode, goal: Number(goal) || 0,
+          suggestionAmount: Number(suggestionAmount) || 0, suggestionUnit,
+          people, expenses, tip: Number(tip) || 0,
         }),
       });
       if (!res.ok) throw new Error('Failed');
@@ -448,18 +480,71 @@ export default function Helmr() {
           <button style={S.btnGhost} onClick={() => setScreen('chooseType')}>← Back</button>
           <h2 style={{ fontSize: '22px', margin: '8px 0 16px', fontWeight: 500 }}>{t.icon} {t.label} details</h2>
 
+          <label style={S.label}>How is this being paid for?</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '4px' }}>
+            <button
+              onClick={() => setMode('cost_split')}
+              style={{ padding: '10px 8px', borderRadius: '10px', border: mode === 'cost_split' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: mode === 'cost_split' ? '#1a1a1a' : 'white', color: mode === 'cost_split' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+            >
+              <div style={{ fontSize: '13px', fontWeight: 500 }}>Split a cost</div>
+              <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>Known total, split evenly</div>
+            </button>
+            <button
+              onClick={() => setMode('open_pool')}
+              style={{ padding: '10px 8px', borderRadius: '10px', border: mode === 'open_pool' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: mode === 'open_pool' ? '#1a1a1a' : 'white', color: mode === 'open_pool' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+            >
+              <div style={{ fontSize: '13px', fontWeight: 500 }}>Open pool</div>
+              <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>Chip in what you want</div>
+            </button>
+          </div>
+          <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 14px' }}>
+            {mode === 'cost_split'
+              ? "Everyone owes an equal share of the total."
+              : "No pressure, no fixed share. Each person decides their contribution."}
+          </p>
+
           <label style={S.label}>Your name</label>
           <input style={S.input} placeholder="e.g. Sam" value={organizerName} onChange={e => updateOrganizerName(e.target.value)} />
           <div style={{ height: '14px' }} />
 
           <label style={S.label}>Your Interac e-Transfer email</label>
           <input style={S.input} type="email" placeholder="e.g. you@example.com" value={organizerEmail} onChange={e => setOrganizerEmail(e.target.value)} />
-          <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>This is where guests send their share</p>
+          <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>This is where guests send their contribution</p>
           <div style={{ height: '14px' }} />
 
           <label style={S.label}>Event name</label>
           <input style={S.input} placeholder="e.g. Layla's 30th" value={eventName} onChange={e => setEventName(e.target.value)} />
           <div style={{ height: '14px' }} />
+
+          {mode === 'open_pool' && (
+            <>
+              <label style={S.label}>Suggested contribution (optional)</label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '14px', color: '#777' }}>$</span>
+                <input style={S.input} type="number" min="0" placeholder="10" value={suggestionAmount || ''} onChange={e => setSuggestionAmount(e.target.value)} />
+                <select
+                  style={{ ...S.input, width: 'auto' }}
+                  value={suggestionUnit}
+                  onChange={e => setSuggestionUnit(e.target.value)}
+                >
+                  <option value="per person">per person</option>
+                  <option value="per kid">per kid</option>
+                  <option value="per family">per family</option>
+                  <option value="total">total</option>
+                </select>
+              </div>
+              <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>Just a starting point — guests can give more, less, or nothing.</p>
+              <div style={{ height: '14px' }} />
+
+              <label style={S.label}>Goal (optional)</label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <span style={{ fontSize: '14px', color: '#777' }}>$</span>
+                <input style={S.input} type="number" min="0" placeholder="Leave blank for no target" value={goal || ''} onChange={e => setGoal(e.target.value)} />
+              </div>
+              <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>If you're trying to buy something specific.</p>
+              <div style={{ height: '14px' }} />
+            </>
+          )}
 
           <label style={S.label}><input type="checkbox" checked={dateTBD} onChange={() => setDateTBD(!dateTBD)} style={{ marginRight: '4px' }} /> Date TBD</label>
           {!dateTBD && <input style={S.input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />}
@@ -497,20 +582,54 @@ export default function Helmr() {
 
         {tab === 'overview' && (
           <>
-            <div style={S.card}>
-              <div style={S.label}>Total cost</div>
-              <div style={{ fontSize: '26px', fontWeight: 500 }}>${total.toLocaleString()}</div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              <div style={S.card}>
-                <div style={S.label}>Confirmed</div>
-                <div style={{ fontSize: '18px', fontWeight: 500 }}>{confirmed} / {people.length}</div>
-              </div>
-              <div style={S.card}>
-                <div style={S.label}>Per person</div>
-                <div style={{ fontSize: '18px', fontWeight: 500 }}>${perPerson}</div>
-              </div>
-            </div>
+            {mode === 'cost_split' ? (
+              <>
+                <div style={S.card}>
+                  <div style={S.label}>Total cost</div>
+                  <div style={{ fontSize: '26px', fontWeight: 500 }}>${total.toLocaleString()}</div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div style={S.card}>
+                    <div style={S.label}>Confirmed</div>
+                    <div style={{ fontSize: '18px', fontWeight: 500 }}>{confirmed} / {people.length}</div>
+                  </div>
+                  <div style={S.card}>
+                    <div style={S.label}>Per person</div>
+                    <div style={{ fontSize: '18px', fontWeight: 500 }}>${perPerson}</div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={S.card}>
+                  <div style={S.label}>Pooled so far</div>
+                  <div style={{ fontSize: '26px', fontWeight: 500 }}>${pooledTotal.toLocaleString()}</div>
+                  {Number(goal) > 0 && (
+                    <>
+                      <div style={{ height: '6px', background: '#eee', borderRadius: '999px', marginTop: '10px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.min(100, (pooledTotal / Number(goal)) * 100)}%`, background: '#085041' }} />
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#777', marginTop: '6px' }}>Goal: ${Number(goal).toLocaleString()}</div>
+                    </>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div style={S.card}>
+                    <div style={S.label}>Contributed</div>
+                    <div style={{ fontSize: '18px', fontWeight: 500 }}>{contributorCount} / {inviteeCount}</div>
+                  </div>
+                  <div style={S.card}>
+                    <div style={S.label}>Suggested</div>
+                    <div style={{ fontSize: '18px', fontWeight: 500 }}>
+                      {Number(suggestionAmount) > 0 ? `$${Number(suggestionAmount)}` : '—'}
+                    </div>
+                    {Number(suggestionAmount) > 0 && (
+                      <div style={{ fontSize: '11px', color: '#999' }}>{suggestionUnit}</div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
             <button style={{ ...S.btn, ...S.btnPrimary, marginTop: '12px' }} onClick={() => setShareOpen(true)}>📋 Share invite links</button>
             <p style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>Event ID: {eventId}</p>
             {!organizerEmail && (
@@ -526,6 +645,7 @@ export default function Helmr() {
         {people.map(p => {
               const c = statusStyles[p.status];
               const isOrganizer = p.role === 'organizer';
+              const contributed = Number(p.contributedAmount) || 0;
               return (
                 <div key={p.id} style={S.card}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
@@ -534,8 +654,14 @@ export default function Helmr() {
                       {isOrganizer && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · organizer</span>}
                       {p.viewedAt && !isOrganizer && <span style={{ fontSize: '11px', color: '#085041', fontWeight: 400 }}> · viewed</span>}
                     </div>
-                    {!isOrganizer && (
+                    {!isOrganizer && mode === 'open_pool' && contributed > 0 && (
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#085041' }}>${contributed}</span>
+                    )}
+                    {!isOrganizer && mode === 'cost_split' && (
                       <span style={{ ...S.pill, background: c?.bg || '#eee', color: c?.fg || '#666' }} onClick={() => cycleStatus(p.id)}>{p.status}</span>
+                    )}
+                    {!isOrganizer && mode === 'open_pool' && contributed === 0 && (
+                      <span style={{ ...S.pill, background: '#eeeae0', color: '#666' }}>waiting</span>
                     )}
                     {!isOrganizer && (
                       <button style={{ ...S.btnGhost, padding: '4px' }} onClick={() => setPeople(people.filter(x => x.id !== p.id))} aria-label="Remove">🗑️</button>
@@ -557,6 +683,11 @@ export default function Helmr() {
 
         {tab === 'expenses' && (
           <>
+            {mode === 'open_pool' && (
+              <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px', padding: '8px 10px', background: '#f5f3ee', borderRadius: '8px' }}>
+                In Open Pool, expenses are just a wish-list — they don't set each person's share. Guests give what they want, and you spend what's pooled.
+              </p>
+            )}
             {expenses.map(e => (
               <div key={e.id} style={S.card}>
                 <input style={{ ...S.input, marginBottom: '8px' }} value={e.name} onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, name: ev.target.value } : x))} />
