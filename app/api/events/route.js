@@ -21,12 +21,14 @@ export async function POST(request) {
       organizerName: body.organizerName || 'Organizer',
       organizerEmail: body.organizerEmail || '',
       mode: body.mode === 'open_pool' ? 'open_pool' : 'cost_split',
+      inviteMode: body.inviteMode === 'broadcast' ? 'broadcast' : 'personal',
       goal: Number(body.goal) || 0,
       suggestionAmount: Number(body.suggestionAmount) || 0,
       suggestionUnit: body.suggestionUnit || '',
       people: body.people || [],
       expenses: body.expenses || [],
       tip: Number(body.tip) || 0,
+      viewCount: 0,
     });
 
     return NextResponse.json(event);
