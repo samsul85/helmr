@@ -861,6 +861,47 @@ export default function Helmr() {
         {tab === 'extras' && (
           <>
             <div style={S.card}>
+              <div style={{ fontWeight: 500, marginBottom: '8px' }}>📝 Event details</div>
+
+              <label style={S.label}>Event name</label>
+              <input style={{ ...S.input, marginBottom: '10px' }} value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. Layla's 30th" />
+
+              <label style={S.label}><input type="checkbox" checked={dateTBD} onChange={() => setDateTBD(!dateTBD)} style={{ marginRight: '4px' }} /> Date TBD</label>
+              {!dateTBD && <input style={{ ...S.input, marginBottom: '10px' }} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />}
+
+              <label style={S.label}><input type="checkbox" checked={locTBD} onChange={() => setLocTBD(!locTBD)} style={{ marginRight: '4px' }} /> Location TBD</label>
+              {!locTBD && <input style={S.input} placeholder="Where?" value={eventLoc} onChange={e => setEventLoc(e.target.value)} />}
+            </div>
+
+            {mode === 'open_pool' && (
+              <div style={S.card}>
+                <div style={{ fontWeight: 500, marginBottom: '8px' }}>💵 Pool settings</div>
+
+                <label style={S.label}>Suggested contribution (optional)</label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '14px', color: '#777' }}>$</span>
+                  <input style={S.input} type="number" min="0" placeholder="10" value={suggestionAmount || ''} onChange={e => setSuggestionAmount(e.target.value)} />
+                  <select
+                    style={{ ...S.input, width: 'auto' }}
+                    value={suggestionUnit}
+                    onChange={e => setSuggestionUnit(e.target.value)}
+                  >
+                    <option value="per person">per person</option>
+                    <option value="per kid">per kid</option>
+                    <option value="per family">per family</option>
+                    <option value="total">total</option>
+                  </select>
+                </div>
+
+                <label style={S.label}>Goal (optional)</label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '14px', color: '#777' }}>$</span>
+                  <input style={S.input} type="number" min="0" placeholder="Leave blank for no target" value={goal || ''} onChange={e => setGoal(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            <div style={S.card}>
               <div style={{ fontWeight: 500, marginBottom: '4px' }}>💸 Your Interac email</div>
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Where guests send their share</p>
               <input style={S.input} type="email" placeholder="you@example.com" value={organizerEmail} onChange={e => setOrganizerEmail(e.target.value)} />
