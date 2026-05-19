@@ -12,9 +12,30 @@ const S = {
   input: { width: '100%', padding: '12px', borderRadius: '10px', border: '0.5px solid #ddd', fontSize: '15px', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' },
 };
 
-export default function GuestView({ event, guestId }) {
+// Per-event localStorage key for broadcast self-signups
+const lsBroadcastKey = (eventId) => `helmr.broadcast.${eventId}`;
+
+export default function GuestView({ event, guestId: initialGuestIdProp }) {
   const mode = event.mode === 'open_pool' ? 'open_pool' : 'cost_split';
+  const inviteMode = event.inviteMode === 'broadcast' ? 'broadcast' : 'personal';
+
+  // Resolve which guest record (if any) this viewer is acting as.
+  // Priority: URL ?g= param > localStorage (for broadcast revisits) > null.
+  const [resolvedGuestId, setResolvedGuestId] = useState(initialGuestIdProp || null);
+
+  useEffect(() => {
+    if (initialGuestIdProp) return;
+    if (inviteMode !== 'broadcast') return;
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem(lsBroadcastKey(event.id));
+      if (stored) setResolvedGuestId(stored);
+    } catch {}
+  }, [event.id, initialGuestIdProp, inviteMode]);
+
+  const guestId = resolvedGuestId;
   const initialGuest = guestId ? (event.people || []).find(p => p.id === guestId) : null;
+
   const [status, setStatus] = useState(initialGuest?.status || null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -27,14 +48,19 @@ export default function GuestView({ event, guestId }) {
   );
   const [pledged, setPledged] = useState(initialGuest?.contributedAmount != null ? Number(initialGuest.contributedAmount) : null);
 
+  // Broadcast: viewer's own name (only used when they don't have a record yet)
+  const [selfName, setSelfName] = useState(initialGuest?.name || '');
+
+  // Fire view ping. With a guestId → personal mark. Without → broadcast counter.
   useEffect(() => {
-    if (!guestId) return;
     fetch(`/api/events/${event.id}/view`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ guestId }),
+      body: JSON.stringify(guestId ? { guestId } : {}),
     }).catch(() => {});
-  }, [event.id, guestId]);
+    // Only fire once per page load
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.id]);
 
   const sendRsvp = async (newStatus) => {
     if (!guestId) {
@@ -59,13 +85,47 @@ export default function GuestView({ event, guestId }) {
   };
 
   const sendContribution = async () => {
-    if (!guestId) {
-      alert('To pledge, please use the personal link your organizer sent you.');
-      return;
-    }
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt < 0) {
       alert('Please enter a valid amount (or 0).');
+      return;
+    }
+
+    // Broadcast first-time pledge requires a name
+    if (!guestId && inviteMode === 'broadcast') {
+      const name = selfName.trim();
+      if (!name) {
+        alert('Please enter your name so the organizer knows who chipped in.');
+        return;
+      }
+      setSubmitting(true);
+      try {
+        const res = await fetch(`/api/events/${event.id}/contribute`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, amount: amt }),
+        });
+        if (!res.ok) throw new Error('Failed');
+        const data = await res.json();
+        const newId = data.guestId;
+        if (newId) {
+          setResolvedGuestId(newId);
+          if (typeof window !== 'undefined') {
+            try { window.localStorage.setItem(lsBroadcastKey(event.id), newId); } catch {}
+          }
+        }
+        setPledged(amt);
+        setStatus('confirmed');
+      } catch {
+        alert("Couldn't save your pledge. Please try again.");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    if (!guestId) {
+      alert('To pledge, please use the personal link your organizer sent you.');
       return;
     }
     setSubmitting(true);
@@ -92,9 +152,7 @@ export default function GuestView({ event, guestId }) {
   const invitedCount = (event.people || []).filter(p => p.role !== 'organizer').length;
   const confirmedGuests = peopleWithMyStatus.filter(p => p.role !== 'organizer' && (p.status === 'confirmed' || p.status === 'paid')).length;
 
-  // SHARE LABELING FIX (also addresses friends' "$1500 each" feedback):
-  // Show the "if all join" share alongside the current confirmed share,
-  // so guests aren't surprised by inflation as RSVPs trickle in.
+  // Cost-Split share labeling (also addresses friends' "$1500 each" feedback):
   const denomConfirmed = confirmedGuests > 0 ? confirmedGuests : 1;
   const denomInvited = invitedCount > 0 ? invitedCount : 1;
   const totalWithTip = total + Number(event.tip || 0);
@@ -106,7 +164,7 @@ export default function GuestView({ event, guestId }) {
   const confirmedSelf = status === 'confirmed' || status === 'paid';
 
   // ============================================================
-  // OPEN POOL VIEW
+  // OPEN POOL VIEW (covers both personal-link and broadcast)
   // ============================================================
   if (mode === 'open_pool') {
     const goal = Number(event.goal) || 0;
@@ -118,6 +176,7 @@ export default function GuestView({ event, guestId }) {
     const hasPledged = pledged != null;
     const unitLabel = event.suggestionUnit || 'per person';
     const showSuggestion = suggestion > 0;
+    const isBroadcastFirstTime = inviteMode === 'broadcast' && !guestId;
 
     return (
       <div style={S.page}>
@@ -126,8 +185,8 @@ export default function GuestView({ event, guestId }) {
             <div style={{ marginBottom: '12px' }}>
               <div style={{ fontSize: '11px', color: '#999', letterSpacing: '0.5px' }}>YOU'RE INVITED TO CHIP IN</div>
               <h2 style={{ fontSize: '20px', margin: '2px 0 0', fontWeight: 500 }}>{event.eventName || 'Group pool'}</h2>
-              {initialGuest && <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>Hi {initialGuest.name} 👋</div>}
-              {!initialGuest && guestId && <div style={{ fontSize: '12px', color: '#a55', marginTop: '4px' }}>Your guest link may be outdated — please contact the organizer.</div>}
+              {initialGuest && !isBroadcastFirstTime && <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>Hi {initialGuest.name} 👋</div>}
+              {!initialGuest && initialGuestIdProp && <div style={{ fontSize: '12px', color: '#a55', marginTop: '4px' }}>Your guest link may be outdated — please contact the organizer.</div>}
               {event.organizerName && <div style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>From {event.organizerName}</div>}
             </div>
 
@@ -162,6 +221,20 @@ export default function GuestView({ event, guestId }) {
                     Any amount helps. No pressure — give what feels right, or skip.
                   </p>
                 )}
+
+                {isBroadcastFirstTime && (
+                  <>
+                    <label style={S.label}>Your name</label>
+                    <input
+                      type="text"
+                      style={{ ...S.input, marginBottom: '10px' }}
+                      value={selfName}
+                      onChange={e => setSelfName(e.target.value)}
+                      placeholder="So the organizer knows who chipped in"
+                    />
+                  </>
+                )}
+
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
                   <span style={{ fontSize: '20px', color: '#777' }}>$</span>
                   <input
@@ -175,22 +248,19 @@ export default function GuestView({ event, guestId }) {
                 </div>
                 <button
                   style={{ ...S.btn, ...S.btnPrimary, opacity: submitting ? 0.6 : 1 }}
-                  disabled={submitting || !guestId}
+                  disabled={submitting}
                   onClick={sendContribution}
                 >
                   {submitting ? 'Saving…' : 'Confirm my contribution'}
                 </button>
-                <button
-                  style={{ ...S.btn, marginTop: '8px' }}
-                  disabled={submitting || !guestId}
-                  onClick={() => sendRsvp('declined')}
-                >
-                  I can't this time
-                </button>
-                {!guestId && (
-                  <p style={{ fontSize: '11px', color: '#999', textAlign: 'center', marginTop: '10px' }}>
-                    Open your personal invite link to pledge.
-                  </p>
+                {guestId && (
+                  <button
+                    style={{ ...S.btn, marginTop: '8px' }}
+                    disabled={submitting}
+                    onClick={() => sendRsvp('declined')}
+                  >
+                    I can't this time
+                  </button>
                 )}
               </div>
             )}
@@ -276,7 +346,7 @@ export default function GuestView({ event, guestId }) {
   }
 
   // ============================================================
-  // COST SPLIT VIEW (existing behavior + clearer share labeling)
+  // COST SPLIT VIEW
   // ============================================================
   return (
     <div style={S.page}>
@@ -286,7 +356,7 @@ export default function GuestView({ event, guestId }) {
             <div style={{ fontSize: '11px', color: '#999', letterSpacing: '0.5px' }}>YOU'RE INVITED</div>
             <h2 style={{ fontSize: '20px', margin: '2px 0 0', fontWeight: 500 }}>{event.eventName || 'Group event'}</h2>
             {initialGuest && <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>Hi {initialGuest.name} 👋</div>}
-            {!initialGuest && guestId && <div style={{ fontSize: '12px', color: '#a55', marginTop: '4px' }}>Your guest link may be outdated — please contact the organizer.</div>}
+            {!initialGuest && initialGuestIdProp && <div style={{ fontSize: '12px', color: '#a55', marginTop: '4px' }}>Your guest link may be outdated — please contact the organizer.</div>}
             {event.organizerName && <div style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>From {event.organizerName}</div>}
           </div>
 
