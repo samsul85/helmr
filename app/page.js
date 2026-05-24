@@ -218,7 +218,7 @@ function ShareModal({ open, onClose, event }) {
 
           <button
             style={{ ...S.btn, marginBottom: '8px' }}
-            onClick={() => window.open(eventBase, '_blank', 'noopener')}
+            onClick={() => window.open(`${eventBase}?preview=1`, '_blank', 'noopener')}
           >
             👁 Preview as guest
           </button>
@@ -281,7 +281,7 @@ function ShareModal({ open, onClose, event }) {
 
         <button
           style={{ ...S.btn, marginTop: '8px' }}
-          onClick={() => window.open(eventBase, '_blank', 'noopener')}
+          onClick={() => window.open(`${eventBase}?preview=1`, '_blank', 'noopener')}
         >
           👁 Preview as guest (general link)
         </button>
@@ -377,6 +377,13 @@ export default function Helmr() {
   };
 
   const saveTimerRef = useRef(null);
+  const knownGuestIdsRef = useRef(new Set());
+  // Track which guest IDs the client has ever seen, so deletes can be told
+  // apart from "joined after last sync" on the server side.
+  useEffect(() => {
+    people.forEach(p => knownGuestIdsRef.current.add(p.id));
+  }, [people]);
+
   useEffect(() => {
     if (!eventId || screen !== 'dashboard') return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -392,6 +399,7 @@ export default function Helmr() {
             mode, inviteMode, goal: Number(goal) || 0,
             suggestionAmount: Number(suggestionAmount) || 0, suggestionUnit,
             people, expenses, tip: Number(tip) || 0,
+            knownGuestIds: Array.from(knownGuestIdsRef.current),
           }),
         });
         if (eventId) saveEventToLocal({ id: eventId, name: eventName || 'Untitled event', updatedAt: Date.now() });
