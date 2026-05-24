@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 export async function POST(request, { params }) {
   try {
     const body = await request.json();
-    const { guestId, name, amount } = body || {};
+    const { guestId, name, amount, customFieldValue } = body || {};
 
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt < 0) {
@@ -15,8 +15,11 @@ export async function POST(request, { params }) {
 
     if (guestId) {
       // Personal-link or returning-broadcast guest: update existing record
-      const event = await setGuestContribution(params.eventId, guestId, amt);
-      if (!event) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      const result = await setGuestContribution(params.eventId, guestId, amt, customFieldValue);
+      if (!result) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      if (result.closed) {
+        return NextResponse.json({ error: 'Event is closed to new joiners.' }, { status: 410 });
+      }
       return NextResponse.json({ ok: true, guestId });
     }
 
@@ -26,8 +29,11 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'name required' }, { status: 400 });
     }
 
-    const result = await addBroadcastContribution(params.eventId, cleanName, amt);
+    const result = await addBroadcastContribution(params.eventId, cleanName, amt, customFieldValue);
     if (!result) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    if (result.closed) {
+      return NextResponse.json({ error: 'Event is closed to new contributions.' }, { status: 410 });
+    }
     return NextResponse.json({ ok: true, guestId: result.guestId });
   } catch (err) {
     console.error('POST contribute error:', err);
