@@ -610,6 +610,20 @@ export default function Helmr() {
   };
 
   const goToDashboard = async () => {
+    // Cost Split requires a deadline: it gates when guests see their final share
+    // and the e-transfer details. Without it, the whole "RSVP first, pay after"
+    // flow breaks.
+    if (mode === 'cost_split' && !responseDeadline) {
+      alert('Please set a response deadline. Guests will see their final share and how to pay only after this date.');
+      return;
+    }
+    if (mode === 'cost_split' && responseDeadline) {
+      const d = new Date(responseDeadline);
+      if (!isNaN(d.getTime()) && d.getTime() < Date.now()) {
+        alert('The response deadline is in the past. Please pick a future date.');
+        return;
+      }
+    }
     try {
       setSaving(true);
       const res = await fetch('/api/events', {
@@ -789,7 +803,9 @@ export default function Helmr() {
           {!locTBD && <input style={S.input} placeholder="Where?" value={eventLoc} onChange={e => setEventLoc(e.target.value)} />}
           <div style={{ height: '14px' }} />
 
-          <label style={S.label}>Response deadline (optional)</label>
+          <label style={S.label}>
+            Response deadline {mode === 'cost_split' ? <span style={{ color: '#a55' }}>*</span> : <span style={{ color: '#999', fontWeight: 400 }}>(optional)</span>}
+          </label>
           <input
             style={S.input}
             type="datetime-local"
@@ -797,7 +813,9 @@ export default function Helmr() {
             onChange={e => setResponseDeadline(e.target.value)}
           />
           <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>
-            After this, new people can't join. Already-confirmed guests can still pay.
+            {mode === 'cost_split'
+              ? 'When RSVPs close. After this, guests see their final share and where to send funds.'
+              : 'After this, new people can\u2019t join. Already-confirmed guests can still pay.'}
           </p>
           <div style={{ height: '14px' }} />
 
@@ -943,10 +961,33 @@ export default function Helmr() {
                 </div>
               </>
             )}
-            <button style={{ ...S.btn, ...S.btnPrimary, marginTop: '12px' }} onClick={() => setShareOpen(true)}>
-              📋 {inviteMode === 'broadcast' ? 'Share the link' : 'Share invite links'}
-            </button>
-            <p style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>Event ID: {eventId}</p>
+            {(() => {
+              const missingDeadline = mode === 'cost_split' && !responseDeadline;
+              return (
+                <>
+                  <button
+                    style={{
+                      ...S.btn,
+                      ...S.btnPrimary,
+                      marginTop: '12px',
+                      opacity: missingDeadline ? 0.5 : 1,
+                      cursor: missingDeadline ? 'not-allowed' : 'pointer',
+                    }}
+                    disabled={missingDeadline}
+                    onClick={() => setShareOpen(true)}
+                  >
+                    📋 {inviteMode === 'broadcast' ? 'Share the link' : 'Share invite links'}
+                  </button>
+                  <p style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>Event ID: {eventId}</p>
+                  {missingDeadline && (
+                    <div style={{ ...S.card, marginTop: '12px', borderColor: '#f0c595', background: '#fdf6ec' }}>
+                      <div style={{ fontSize: '13px', color: '#7a5320', marginBottom: '4px' }}>⚠️ Set a response deadline before sharing.</div>
+                      <div style={{ fontSize: '12px', color: '#7a5320' }}>Guests need a clear "RSVP by" date so the math finalizes before they're asked to pay. Edit in the Extras tab.</div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             {!organizerEmail && (
               <div style={{ ...S.card, marginTop: '12px', borderColor: '#f0c595', background: '#fdf6ec' }}>
                 <div style={{ fontSize: '13px', color: '#7a5320' }}>⚠️ Add your Interac email in the Extras tab so guests know where to send funds.</div>
@@ -1232,7 +1273,9 @@ export default function Helmr() {
               <label style={S.label}><input type="checkbox" checked={locTBD} onChange={() => setLocTBD(!locTBD)} style={{ marginRight: '4px' }} /> Location TBD</label>
               {!locTBD && <input style={{ ...S.input, marginBottom: '10px' }} placeholder="Where?" value={eventLoc} onChange={e => setEventLoc(e.target.value)} />}
 
-              <label style={S.label}>Response deadline (optional)</label>
+              <label style={S.label}>
+                Response deadline {mode === 'cost_split' ? <span style={{ color: '#a55' }}>*</span> : <span style={{ color: '#999', fontWeight: 400 }}>(optional)</span>}
+              </label>
               <input
                 style={{ ...S.input, marginBottom: '4px' }}
                 type="datetime-local"
@@ -1240,7 +1283,9 @@ export default function Helmr() {
                 onChange={e => setResponseDeadline(e.target.value)}
               />
               <p style={{ fontSize: '11px', color: '#999', margin: '0 0 10px' }}>
-                After this, new people can't join. Already-confirmed guests can still pay.
+                {mode === 'cost_split'
+                  ? 'When RSVPs close. Guests see final share + payment details after this.'
+                  : 'After this, new people can\u2019t join. Already-confirmed guests can still pay.'}
               </p>
 
               <label style={S.label}>Ask each guest for… (optional)</label>
