@@ -104,14 +104,15 @@ export async function GET(request, { params }) {
       return NextResponse.json({ error: 'No screenshot' }, { status: 404 });
     }
 
-    const blob = await get(guest.paymentScreenshotKey);
-    if (!blob) return NextResponse.json({ error: 'No screenshot' }, { status: 404 });
+    const result = await get(guest.paymentScreenshotKey, { access: 'private' });
+    if (!result || !result.stream) {
+      return NextResponse.json({ error: 'No screenshot' }, { status: 404 });
+    }
 
-    // get() returns a stream-able response from the private blob.
-    return new Response(blob.body, {
+    return new Response(result.stream, {
       status: 200,
       headers: {
-        'Content-Type': blob.contentType || 'application/octet-stream',
+        'Content-Type': result.blob.contentType || 'application/octet-stream',
         'Cache-Control': 'private, max-age=300',
       },
     });
