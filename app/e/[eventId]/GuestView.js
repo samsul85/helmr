@@ -52,6 +52,28 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
   // Broadcast: viewer's own name (only used when they don't have a record yet)
   const [selfName, setSelfName] = useState(initialGuest?.name || '');
 
+  // Custom field on join (optional; configured by organizer)
+  const customFieldLabel = (event.customFieldLabel || '').trim();
+  const hasCustomField = customFieldLabel.length > 0;
+  const [customFieldValue, setCustomFieldValue] = useState(initialGuest?.customFieldValue || '');
+
+  // Response deadline — lenient mode:
+  //   - Already-confirmed / paid / declined / pledged guests retain full access.
+  //   - New joiners (no record yet, or status='invited' with no contribution) are blocked.
+  const deadlineDate = event.responseDeadline ? new Date(event.responseDeadline) : null;
+  const deadlinePassed = !!(deadlineDate && !isNaN(deadlineDate.getTime()) && deadlineDate.getTime() < Date.now());
+  const formatDeadline = (d) => {
+    if (!d || isNaN(d.getTime())) return '';
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  };
+  // A viewer counts as "already in" if they have a record AND have done something
+  // (responded, contributed, or been added by organizer with a status beyond 'invited').
+  const isAlreadyIn = !!(initialGuest && (
+    (initialGuest.status && initialGuest.status !== 'invited') ||
+    Number(initialGuest.contributedAmount) > 0
+  ));
+  const lockedOut = deadlinePassed && !isAlreadyIn && !preview;
+
   // Fire view ping. With a guestId → personal mark. Without → broadcast counter.
   // Skip entirely in preview mode so the organizer's preview doesn't inflate counts.
   useEffect(() => {
@@ -79,8 +101,16 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
       const res = await fetch(`/api/events/${event.id}/rsvp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId, status: newStatus }),
+        body: JSON.stringify({
+          guestId,
+          status: newStatus,
+          customFieldValue: hasCustomField ? customFieldValue.trim() : undefined,
+        }),
       });
+      if (res.status === 410) {
+        alert("This event has closed and isn't accepting new RSVPs.");
+        return;
+      }
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
       setStatus(data.status || newStatus);
@@ -114,8 +144,16 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
         const res = await fetch(`/api/events/${event.id}/contribute`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, amount: amt }),
+          body: JSON.stringify({
+            name,
+            amount: amt,
+            customFieldValue: hasCustomField ? customFieldValue.trim() : undefined,
+          }),
         });
+        if (res.status === 410) {
+          alert("This pool has closed and isn't accepting new contributions.");
+          return;
+        }
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
         const newId = data.guestId;
@@ -144,8 +182,16 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
       const res = await fetch(`/api/events/${event.id}/contribute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId, amount: amt }),
+        body: JSON.stringify({
+          guestId,
+          amount: amt,
+          customFieldValue: hasCustomField ? customFieldValue.trim() : undefined,
+        }),
       });
+      if (res.status === 410) {
+        alert("This pool has closed and isn't accepting new contributions.");
+        return;
+      }
       if (!res.ok) throw new Error('Failed');
       setPledged(amt);
       setStatus('confirmed');
@@ -173,6 +219,30 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
   const organizerEmail = event.organizerEmail || null;
   const declined = status === 'declined';
   const confirmedSelf = status === 'confirmed' || status === 'paid';
+
+  // ============================================================
+  // CLOSED VIEW (deadline passed, viewer not already in)
+  // ============================================================
+  if (lockedOut) {
+    return (
+      <div style={S.page}>
+        <div style={S.frame}>
+          <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+            <div style={{ fontSize: '40px', marginBottom: '8px' }}>🔒</div>
+            <h2 style={{ fontSize: '20px', margin: '0 0 8px', fontWeight: 500 }}>This pool has closed</h2>
+            <p style={{ fontSize: '14px', color: '#666', margin: '0 0 12px' }}>
+              {event.eventName || 'The event'} stopped accepting new {mode === 'open_pool' ? 'contributions' : 'RSVPs'} on {formatDeadline(deadlineDate)}.
+            </p>
+            {event.organizerName && (
+              <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>
+                Reach out to {event.organizerName} directly if you'd still like to chip in.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ============================================================
   // OPEN POOL VIEW (covers both personal-link and broadcast)
@@ -247,6 +317,19 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
                       value={selfName}
                       onChange={e => setSelfName(e.target.value)}
                       placeholder="So the organizer knows who chipped in"
+                    />
+                  </>
+                )}
+
+                {hasCustomField && (
+                  <>
+                    <label style={S.label}>{customFieldLabel}</label>
+                    <input
+                      type="text"
+                      style={{ ...S.input, marginBottom: '10px' }}
+                      value={customFieldValue}
+                      onChange={e => setCustomFieldValue(e.target.value)}
+                      maxLength={80}
                     />
                   </>
                 )}
@@ -393,6 +476,22 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
                   Could rise to ~${shareCurrent} if some can't make it.
                 </div>
               )}
+            </div>
+          )}
+
+          {hasCustomField && !declined && (
+            <div style={S.card}>
+              <label style={S.label}>{customFieldLabel}</label>
+              <input
+                type="text"
+                style={S.input}
+                value={customFieldValue}
+                onChange={e => setCustomFieldValue(e.target.value)}
+                maxLength={80}
+              />
+              <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>
+                Saved when you RSVP.
+              </p>
             </div>
           )}
 
