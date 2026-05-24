@@ -351,11 +351,11 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
   // ============================================================
   if (mode === 'open_pool') {
     const goal = Number(event.goal) || 0;
+    // Pool total includes the organizer's own contribution if they've added one.
     const pooledTotal = (event.people || [])
-      .filter(p => p.role !== 'organizer')
       .reduce((s, p) => s + (Number(p.contributedAmount) || 0), 0);
     const contributors = (event.people || [])
-      .filter(p => p.role !== 'organizer' && Number(p.contributedAmount) > 0).length;
+      .filter(p => Number(p.contributedAmount) > 0).length;
     const hasPledged = pledged != null;
     const unitLabel = event.suggestionUnit || 'per person';
     const showSuggestion = suggestion > 0;
