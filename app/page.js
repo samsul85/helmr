@@ -347,14 +347,23 @@ export default function Helmr() {
   useEffect(() => { setSavedEvents(loadSavedEvents()); }, []);
 
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-  const confirmed = people.filter(p => p.role === 'organizer' || p.status === 'confirmed' || p.status === 'paid').length;
+  // Cost Split: organizer only counts as "confirmed" (and gets a share of the bill)
+  // if they've explicitly opted themselves in via the "Include myself" toggle.
+  // The flag lives on the organizer row as `includedInSplit`. Default = false
+  // (host-pays-separately is the common case). Existing events default to false too.
+  const organizerRow = people.find(p => p.role === 'organizer');
+  const organizerIncludedInSplit = !!(organizerRow && organizerRow.includedInSplit);
+  const confirmed = people.filter(p =>
+    (p.role === 'organizer' ? organizerIncludedInSplit : (p.status === 'confirmed' || p.status === 'paid'))
+  ).length;
   const perPerson = confirmed > 0 ? Math.round((total + Number(tip)) / confirmed) : 0;
 
-  // Open Pool: pooled total = sum of guest contributions
+  // Open Pool: pooled total = sum of ALL contributions, organizer included.
+  // The organizer's contribution lives on their person row like everyone else's,
+  // so the dashboard reflects what they personally chipped in alongside guests.
   const pooledTotal = people
-    .filter(p => p.role !== 'organizer')
     .reduce((s, p) => s + (Number(p.contributedAmount) || 0), 0);
-  const contributorCount = people.filter(p => p.role !== 'organizer' && Number(p.contributedAmount) > 0).length;
+  const contributorCount = people.filter(p => Number(p.contributedAmount) > 0).length;
   const inviteeCount = people.filter(p => p.role !== 'organizer').length;
 
   // Deadline helpers: parse the datetime-local string into a JS Date.
@@ -816,9 +825,12 @@ export default function Helmr() {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   <div style={S.card}>
-                    <div style={S.label}>{inviteMode === 'broadcast' ? 'Confirmed' : 'Confirmed'}</div>
+                    <div style={S.label}>Confirmed</div>
                     <div style={{ fontSize: '18px', fontWeight: 500 }}>
-                      {inviteMode === 'broadcast' ? `${confirmed - 1}` : `${confirmed} / ${people.length}`}
+                      {inviteMode === 'broadcast'
+                        ? `${confirmed - (organizerIncludedInSplit ? 1 : 0)}`
+                        : `${confirmed - (organizerIncludedInSplit ? 1 : 0)} / ${inviteeCount}`}
+                      {organizerIncludedInSplit && <span style={{ fontSize: '12px', color: '#666', fontWeight: 400 }}> + you</span>}
                     </div>
                   </div>
                   <div style={S.card}>
@@ -917,6 +929,9 @@ export default function Helmr() {
                       {p.viewedAt && !isOrganizer && <span style={{ fontSize: '11px', color: '#085041', fontWeight: 400 }}> · viewed</span>}
                       {isBroadcastGuest && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · self-added</span>}
                     </div>
+                    {isOrganizer && mode === 'open_pool' && contributed > 0 && (
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#085041' }}>${contributed}</span>
+                    )}
                     {!isOrganizer && mode === 'open_pool' && contributed > 0 && (
                       <span style={{ fontSize: '13px', fontWeight: 500, color: '#085041' }}>${contributed}</span>
                     )}
@@ -951,6 +966,48 @@ export default function Helmr() {
                       >🗑️</button>
                     )}
                   </div>
+
+                  {/* Organizer-specific controls */}
+                  {isOrganizer && mode === 'open_pool' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                      <span style={{ fontSize: '13px', color: '#666', whiteSpace: 'nowrap' }}>My contribution:</span>
+                      <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                        <span style={{ fontSize: '14px', color: '#666', marginRight: '2px' }}>$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          inputMode="numeric"
+                          value={contributed || ''}
+                          placeholder="0"
+                          onChange={e => {
+                            const v = Math.max(0, Number(e.target.value) || 0);
+                            setPeople(people.map(x =>
+                              x.id === p.id ? { ...x, contributedAmount: v } : x
+                            ));
+                          }}
+                          style={{ ...S.input, padding: '6px 8px', fontSize: '14px', flex: 1 }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {isOrganizer && mode === 'cost_split' && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: '13px', color: '#666', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!p.includedInSplit}
+                        onChange={e => {
+                          const checked = e.target.checked;
+                          setPeople(people.map(x =>
+                            x.id === p.id ? { ...x, includedInSplit: checked } : x
+                          ));
+                        }}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                      Include myself in the split
+                    </label>
+                  )}
+
                   {!isOrganizer && customFieldLabel && p.customFieldValue && (
                     <div style={{ fontSize: '12px', color: '#777', marginTop: '4px' }}>
                       {customFieldLabel}: <span style={{ color: '#333' }}>{p.customFieldValue}</span>
