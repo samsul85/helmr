@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { participantsForExpense, computePersonShare } from '../lib/shares';
 
 // ============ CONFIG ============
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mredzlyn';
@@ -342,6 +343,16 @@ export default function Helmr() {
     { id: 'organizer', name: 'You', status: 'paid', role: 'organizer' },
   ]);
   const [expenses, setExpenses] = useState([]);
+  // Local-only UI state: which expense rows have their participant picker open.
+  // Not persisted — lives in component memory.
+  const [expandedExpenseIds, setExpandedExpenseIds] = useState(new Set());
+  const toggleExpenseExpanded = (id) => {
+    setExpandedExpenseIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const [savedEvents, setSavedEvents] = useState([]);
   useEffect(() => { setSavedEvents(loadSavedEvents()); }, []);
@@ -356,7 +367,38 @@ export default function Helmr() {
   const confirmed = people.filter(p =>
     (p.role === 'organizer' ? organizerIncludedInSplit : (p.status === 'confirmed' || p.status === 'paid'))
   ).length;
-  const perPerson = confirmed > 0 ? Math.round((total + Number(tip)) / confirmed) : 0;
+
+  // Per-person shares: compute each person's expected total across all expenses
+  // they're on (using per-expense participant lists when set, else "everyone").
+  // The tip is split equally across all confirmed people, since it's a planner
+  // thank-you, not tied to any particular expense.
+  const shareOpts = { confirmedOnly: true, includeOrganizer: organizerIncludedInSplit };
+  const tipPerPerson = confirmed > 0 ? Number(tip) / confirmed : 0;
+  const peopleShares = people.map(p => {
+    const includedInAnyExpense = p.role === 'organizer' ? organizerIncludedInSplit : true;
+    if (!includedInAnyExpense) return { id: p.id, share: 0, breakdown: [] };
+    const { share, breakdown } = computePersonShare(p.id, expenses, people, shareOpts);
+    // Add tip share if this person is "confirmed" in the split (org via toggle, guests via status)
+    const isConfirmedForTip = p.role === 'organizer'
+      ? organizerIncludedInSplit
+      : (p.status === 'confirmed' || p.status === 'paid');
+    return { id: p.id, share: share + (isConfirmedForTip ? tipPerPerson : 0), breakdown };
+  });
+  // Average + range for the Overview card. If all expenses default to everyone,
+  // every person's share is identical and min === max === avg.
+  const confirmedSharesArr = peopleShares
+    .filter(s => {
+      const p = people.find(x => x.id === s.id);
+      if (!p) return false;
+      return p.role === 'organizer' ? organizerIncludedInSplit : (p.status === 'confirmed' || p.status === 'paid');
+    })
+    .map(s => s.share);
+  const perPerson = confirmedSharesArr.length > 0
+    ? Math.round(confirmedSharesArr.reduce((a, b) => a + b, 0) / confirmedSharesArr.length)
+    : 0;
+  const minShare = confirmedSharesArr.length > 0 ? Math.round(Math.min(...confirmedSharesArr)) : 0;
+  const maxShare = confirmedSharesArr.length > 0 ? Math.round(Math.max(...confirmedSharesArr)) : 0;
+  const sharesVary = minShare !== maxShare;
 
   // Open Pool: pooled total = sum of ALL contributions, organizer included.
   // The organizer's contribution lives on their person row like everyone else's,
@@ -834,8 +876,13 @@ export default function Helmr() {
                     </div>
                   </div>
                   <div style={S.card}>
-                    <div style={S.label}>Per person</div>
+                    <div style={S.label}>{sharesVary ? 'Per person (avg)' : 'Per person'}</div>
                     <div style={{ fontSize: '18px', fontWeight: 500 }}>${perPerson}</div>
+                    {sharesVary && (
+                      <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
+                        Range ${minShare}–${maxShare}
+                      </div>
+                    )}
                   </div>
                 </div>
                 {inviteMode === 'broadcast' && (
@@ -920,6 +967,11 @@ export default function Helmr() {
               const isOrganizer = p.role === 'organizer';
               const contributed = Number(p.contributedAmount) || 0;
               const isBroadcastGuest = p.source === 'broadcast';
+              const personShare = peopleShares.find(s => s.id === p.id);
+              const shareAmt = personShare ? Math.round(personShare.share) : 0;
+              const shouldShowShare = mode === 'cost_split' && (
+                isOrganizer ? organizerIncludedInSplit : (p.status === 'confirmed' || p.status === 'paid')
+              ) && shareAmt > 0;
               return (
                 <div key={p.id} style={S.card}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
@@ -934,6 +986,9 @@ export default function Helmr() {
                     )}
                     {!isOrganizer && mode === 'open_pool' && contributed > 0 && (
                       <span style={{ fontSize: '13px', fontWeight: 500, color: '#085041' }}>${contributed}</span>
+                    )}
+                    {shouldShowShare && (
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#085041' }}>${shareAmt}</span>
                     )}
                     {!isOrganizer && mode === 'cost_split' && (
                       <span style={{ ...S.pill, background: c?.bg || '#eee', color: c?.fg || '#666' }} onClick={() => cycleStatus(p.id)}>{p.status}</span>
@@ -1048,16 +1103,114 @@ export default function Helmr() {
                 In Open Pool, expenses are just a wish-list — they don't set each person's share. Guests give what they want, and you spend what's pooled.
               </p>
             )}
-            {expenses.map(e => (
-              <div key={e.id} style={S.card}>
-                <input style={{ ...S.input, marginBottom: '8px' }} value={e.name} onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, name: ev.target.value } : x))} />
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '14px', color: '#777' }}>$</span>
-                  <input style={S.input} type="number" value={e.amount} onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, amount: ev.target.value } : x))} />
-                  <button style={S.btnGhost} onClick={() => setExpenses(expenses.filter(x => x.id !== e.id))}>🗑️</button>
+            {expenses.map(e => {
+              const ids = Array.isArray(e.participantIds) ? e.participantIds : [];
+              const hasCustom = ids.length > 0;
+              // Eligible = everyone in people list; organizer only if included in split
+              const eligible = people.filter(p =>
+                p.role === 'organizer' ? organizerIncludedInSplit : true
+              );
+              const summary = !hasCustom
+                ? `Everyone (${eligible.length})`
+                : `${ids.filter(id => eligible.some(p => p.id === id)).length} of ${eligible.length}`;
+              return (
+                <div key={e.id} style={S.card}>
+                  <input style={{ ...S.input, marginBottom: '8px' }} value={e.name} onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, name: ev.target.value } : x))} />
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '14px', color: '#777' }}>$</span>
+                    <input style={S.input} type="number" value={e.amount} onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, amount: ev.target.value } : x))} />
+                    <button style={S.btnGhost} onClick={() => setExpenses(expenses.filter(x => x.id !== e.id))}>🗑️</button>
+                  </div>
+                  {mode === 'cost_split' && (
+                    <>
+                      <div
+                        style={{
+                          marginTop: '8px',
+                          fontSize: '13px',
+                          color: '#666',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          padding: '6px 8px',
+                          background: '#f5f3ee',
+                          borderRadius: '6px',
+                        }}
+                        onClick={() => toggleExpenseExpanded(e.id)}
+                      >
+                        <span>Who's on this: <span style={{ color: '#333', fontWeight: 500 }}>{summary}</span></span>
+                        <span style={{ fontSize: '11px', color: '#999' }}>{expandedExpenseIds.has(e.id) ? '▲' : '▼'}</span>
+                      </div>
+                      {expandedExpenseIds.has(e.id) && (
+                        <div style={{ marginTop: '6px', padding: '4px 4px 0' }}>
+                          {eligible.length === 0 && (
+                            <p style={{ fontSize: '12px', color: '#999', margin: '4px 0' }}>Add people on the People tab first.</p>
+                          )}
+                          {eligible.map(p => {
+                            const onThis = hasCustom ? ids.includes(p.id) : true;
+                            return (
+                              <label
+                                key={p.id}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  padding: '6px 0',
+                                  fontSize: '14px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={onThis}
+                                  onChange={ev => {
+                                    const checked = ev.target.checked;
+                                    setExpenses(expenses.map(x => {
+                                      if (x.id !== e.id) return x;
+                                      // First edit: initialize participantIds from "everyone".
+                                      // After that, just add/remove the toggled person.
+                                      let nextIds = Array.isArray(x.participantIds) && x.participantIds.length > 0
+                                        ? [...x.participantIds]
+                                        : eligible.map(q => q.id);
+                                      if (checked) {
+                                        if (!nextIds.includes(p.id)) nextIds.push(p.id);
+                                      } else {
+                                        nextIds = nextIds.filter(id => id !== p.id);
+                                      }
+                                      // If they re-selected everyone, drop participantIds back to default ("everyone")
+                                      // so future-added guests are automatically included.
+                                      if (nextIds.length === eligible.length && eligible.every(q => nextIds.includes(q.id))) {
+                                        return { ...x, participantIds: [] };
+                                      }
+                                      return { ...x, participantIds: nextIds };
+                                    }));
+                                  }}
+                                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                />
+                                <span style={{ flex: 1 }}>
+                                  {p.name}
+                                  {p.role === 'organizer' && <span style={{ fontSize: '11px', color: '#999' }}> · you</span>}
+                                </span>
+                              </label>
+                            );
+                          })}
+                          {hasCustom && (
+                            <button
+                              style={{ ...S.btnGhost, fontSize: '12px', padding: '4px 0', marginTop: '4px' }}
+                              onClick={() => setExpenses(expenses.map(x =>
+                                x.id === e.id ? { ...x, participantIds: [] } : x
+                              ))}
+                            >
+                              Reset to everyone
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <button style={S.btn} onClick={() => {
               const n = prompt('Expense name?');
               if (n) setExpenses([...expenses, { id: Date.now(), name: n, amount: 0 }]);
