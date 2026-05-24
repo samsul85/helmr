@@ -20,7 +20,7 @@ Phoebe completed a full Open Pool campaign end-to-end. First real validation eve
 
 Gold is in the workarounds, not "it worked great."
 
-### 3. Organizer contribution to pool
+### 3. Organizer contribution to pool - SHIPPED
 Add organizer as implicit participant with a "My contribution" field reflected in total collected. Currently the organizer's own $ is invisible in dashboard math — breaks open-pool gift collections where the organizer also chips in.
 
 ---
