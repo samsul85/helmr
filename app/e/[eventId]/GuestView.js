@@ -15,7 +15,7 @@ const S = {
 // Per-event localStorage key for broadcast self-signups
 const lsBroadcastKey = (eventId) => `helmr.broadcast.${eventId}`;
 
-export default function GuestView({ event, guestId: initialGuestIdProp }) {
+export default function GuestView({ event, guestId: initialGuestIdProp, preview = false }) {
   const mode = event.mode === 'open_pool' ? 'open_pool' : 'cost_split';
   const inviteMode = event.inviteMode === 'broadcast' ? 'broadcast' : 'personal';
 
@@ -26,12 +26,13 @@ export default function GuestView({ event, guestId: initialGuestIdProp }) {
   useEffect(() => {
     if (initialGuestIdProp) return;
     if (inviteMode !== 'broadcast') return;
+    if (preview) return; // never touch storage in preview mode
     if (typeof window === 'undefined') return;
     try {
       const stored = window.localStorage.getItem(lsBroadcastKey(event.id));
       if (stored) setResolvedGuestId(stored);
     } catch {}
-  }, [event.id, initialGuestIdProp, inviteMode]);
+  }, [event.id, initialGuestIdProp, inviteMode, preview]);
 
   const guestId = resolvedGuestId;
   const initialGuest = guestId ? (event.people || []).find(p => p.id === guestId) : null;
@@ -52,7 +53,9 @@ export default function GuestView({ event, guestId: initialGuestIdProp }) {
   const [selfName, setSelfName] = useState(initialGuest?.name || '');
 
   // Fire view ping. With a guestId → personal mark. Without → broadcast counter.
+  // Skip entirely in preview mode so the organizer's preview doesn't inflate counts.
   useEffect(() => {
+    if (preview) return;
     fetch(`/api/events/${event.id}/view`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -63,6 +66,10 @@ export default function GuestView({ event, guestId: initialGuestIdProp }) {
   }, [event.id]);
 
   const sendRsvp = async (newStatus) => {
+    if (preview) {
+      alert("Preview mode — guests will be able to do this for real.");
+      return;
+    }
     if (!guestId) {
       alert('To RSVP, please use the personal link your organizer sent you.');
       return;
@@ -85,6 +92,10 @@ export default function GuestView({ event, guestId: initialGuestIdProp }) {
   };
 
   const sendContribution = async () => {
+    if (preview) {
+      alert("Preview mode — guests will be able to do this for real.");
+      return;
+    }
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt < 0) {
       alert('Please enter a valid amount (or 0).');
@@ -181,6 +192,11 @@ export default function GuestView({ event, guestId: initialGuestIdProp }) {
     return (
       <div style={S.page}>
         <div style={S.frame}>
+          {preview && (
+            <div style={{ background: '#fef6dd', color: '#7a5d00', padding: '10px 16px', fontSize: '13px', fontWeight: 500, textAlign: 'center', borderBottom: '0.5px solid #f0e3a8' }}>
+              👁 Preview mode — actions are disabled
+            </div>
+          )}
           <div style={{ padding: '14px 20px' }}>
             <div style={{ marginBottom: '12px' }}>
               <div style={{ fontSize: '11px', color: '#999', letterSpacing: '0.5px' }}>YOU'RE INVITED TO CHIP IN</div>
@@ -351,6 +367,11 @@ export default function GuestView({ event, guestId: initialGuestIdProp }) {
   return (
     <div style={S.page}>
       <div style={S.frame}>
+        {preview && (
+          <div style={{ background: '#fef6dd', color: '#7a5d00', padding: '10px 16px', fontSize: '13px', fontWeight: 500, textAlign: 'center', borderBottom: '0.5px solid #f0e3a8' }}>
+            👁 Preview mode — actions are disabled
+          </div>
+        )}
         <div style={{ padding: '14px 20px' }}>
           <div style={{ marginBottom: '12px' }}>
             <div style={{ fontSize: '11px', color: '#999', letterSpacing: '0.5px' }}>YOU'RE INVITED</div>
