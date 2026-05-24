@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { computePersonShare, participantsForExpense } from '../../../lib/shares';
 
 const S = {
   page: { minHeight: '100vh', background: '#f5f3ee', padding: '12px', boxSizing: 'border-box' },
@@ -260,12 +261,61 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
   const invitedCount = (event.people || []).filter(p => p.role !== 'organizer').length;
   const confirmedGuests = peopleWithMyStatus.filter(p => p.role !== 'organizer' && (p.status === 'confirmed' || p.status === 'paid')).length;
 
-  // Cost-Split share labeling (also addresses friends' "$1500 each" feedback):
-  const denomConfirmed = confirmedGuests > 0 ? confirmedGuests : 1;
-  const denomInvited = invitedCount > 0 ? invitedCount : 1;
-  const totalWithTip = total + Number(event.tip || 0);
-  const shareIfAllJoin = Math.round(totalWithTip / denomInvited);
-  const shareCurrent = Math.round(totalWithTip / denomConfirmed);
+  // Per-expense share math: each guest's share is the sum of their share of each
+  // expense they're on. An expense without participantIds defaults to "everyone".
+  //
+  // We compute the guest's share two ways:
+  //   - "if all join" — pretends every invited guest is confirmed (provisional/upper bound on each split's denominator)
+  //   - "current" — only confirmed guests count toward the denominator
+  // The labels stay consistent with the existing UX from the broadcast-mode build.
+  const organizerRow = (event.people || []).find(p => p.role === 'organizer');
+  const organizerInSplit = !!(organizerRow && organizerRow.includedInSplit);
+  const tipTotal = Number(event.tip || 0);
+
+  // For "if all join": treat every guest as confirmed.
+  const allJoinPeople = peopleWithMyStatus.map(p =>
+    p.role === 'organizer' ? p : { ...p, status: 'confirmed' }
+  );
+  const allJoinConfirmedCount = allJoinPeople.filter(p =>
+    p.role === 'organizer' ? organizerInSplit : true
+  ).length;
+  const currentConfirmedCount = peopleWithMyStatus.filter(p =>
+    p.role === 'organizer' ? organizerInSplit : (p.status === 'confirmed' || p.status === 'paid')
+  ).length;
+
+  let shareIfAllJoin = 0;
+  let shareCurrent = 0;
+  if (guestId) {
+    const { share: ifAll } = computePersonShare(guestId, event.expenses || [], allJoinPeople, {
+      confirmedOnly: true, // everyone is "confirmed" in this simulation
+      includeOrganizer: organizerInSplit,
+    });
+    const { share: now } = computePersonShare(guestId, event.expenses || [], peopleWithMyStatus, {
+      confirmedOnly: true,
+      includeOrganizer: organizerInSplit,
+    });
+    const tipIfAll = allJoinConfirmedCount > 0 ? tipTotal / allJoinConfirmedCount : 0;
+    const tipNow = currentConfirmedCount > 0 ? tipTotal / currentConfirmedCount : 0;
+    shareIfAllJoin = Math.round(ifAll + tipIfAll);
+    shareCurrent = Math.round(now + tipNow);
+  } else {
+    // Fallback (no guestId — preview or pre-RSVP broadcast): flat average
+    const denomConfirmed = confirmedGuests > 0 ? confirmedGuests : 1;
+    const denomInvited = invitedCount > 0 ? invitedCount : 1;
+    const totalWithTip = total + tipTotal;
+    shareIfAllJoin = Math.round(totalWithTip / denomInvited);
+    shareCurrent = Math.round(totalWithTip / denomConfirmed);
+  }
+
+  // For "What we're covering" breakdown: which expenses is this guest on?
+  const guestExpenseRows = (event.expenses || []).map(e => {
+    const participants = participantsForExpense(e, peopleWithMyStatus, {
+      confirmedOnly: false,
+      includeOrganizer: organizerInSplit,
+    });
+    const onThis = guestId ? participants.some(p => p.id === guestId) : true;
+    return { ...e, _onThis: onThis, _splitCount: participants.length };
+  });
 
   const organizerEmail = event.organizerEmail || null;
   const declined = status === 'declined';
@@ -659,15 +709,18 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
           {!declined && (
             <div style={S.card}>
               <div style={{ fontWeight: 500, marginBottom: '8px' }}>What's it for</div>
-              {(event.expenses || []).map(e => (
+              {guestExpenseRows.map(e => (
                 <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '14px' }}>
-                  <span style={{ color: '#777' }}>{e.name}</span>
-                  <span>${(Number(e.amount) || 0).toLocaleString()}</span>
+                  <span style={{ color: e._onThis ? '#777' : '#bbb', textDecoration: e._onThis ? 'none' : 'line-through' }}>
+                    {e.name}
+                    {!e._onThis && <span style={{ marginLeft: '6px', fontSize: '11px', color: '#bbb' }}>not on this</span>}
+                  </span>
+                  <span style={{ color: e._onThis ? 'inherit' : '#bbb' }}>${(Number(e.amount) || 0).toLocaleString()}</span>
                 </div>
               ))}
               <div style={{ height: '0.5px', background: '#eee', margin: '8px 0' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 500 }}>
-                <span>Total</span><span>${total.toLocaleString()}</span>
+                <span>Group total</span><span>${total.toLocaleString()}</span>
               </div>
             </div>
           )}
