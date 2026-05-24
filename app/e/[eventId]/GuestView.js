@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const S = {
   page: { minHeight: '100vh', background: '#f5f3ee', padding: '12px', boxSizing: 'border-box' },
@@ -73,6 +73,57 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
     Number(initialGuest.contributedAmount) > 0
   ));
   const lockedOut = deadlinePassed && !isAlreadyIn && !preview;
+
+  // Payment screenshot upload state
+  const [screenshotUploadedAt, setScreenshotUploadedAt] = useState(initialGuest?.paymentScreenshotUploadedAt || null);
+  const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
+  const [screenshotCacheBust, setScreenshotCacheBust] = useState(0);
+  const screenshotInputRef = useRef(null);
+
+  const uploadScreenshot = async (file) => {
+    if (preview) {
+      alert("Preview mode — guests will be able to do this for real.");
+      return;
+    }
+    if (!guestId) {
+      alert('You need to be in the event before uploading a screenshot.');
+      return;
+    }
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please choose an image file.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('That image is over 5 MB. Please choose a smaller one or screenshot at lower resolution.');
+      return;
+    }
+    setUploadingScreenshot(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('guestId', guestId);
+      const res = await fetch(`/api/events/${event.id}/screenshot`, {
+        method: 'POST',
+        body: fd,
+      });
+      if (res.status === 410) {
+        alert("This event has closed.");
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Upload failed');
+      }
+      setScreenshotUploadedAt(Date.now());
+      setScreenshotCacheBust(c => c + 1);
+      setStatus('paid');
+    } catch (err) {
+      alert(err.message || "Upload failed. Please try again.");
+    } finally {
+      setUploadingScreenshot(false);
+    }
+  };
 
   // Fire view ping. With a guestId → personal mark. Without → broadcast counter.
   // Skip entirely in preview mode so the organizer's preview doesn't inflate counts.
@@ -219,6 +270,57 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
   const organizerEmail = event.organizerEmail || null;
   const declined = status === 'declined';
   const confirmedSelf = status === 'confirmed' || status === 'paid';
+
+  // Renders the upload card. Same UI in both open-pool and cost-split views.
+  // Only shown after the guest has at least committed (pledged or RSVPed yes).
+  const renderScreenshotCard = () => {
+    if (!guestId) return null;
+    const hasScreenshot = !!screenshotUploadedAt;
+    const previewUrl = hasScreenshot
+      ? `/api/events/${event.id}/screenshot?guestId=${guestId}&v=${screenshotCacheBust}`
+      : null;
+    return (
+      <div style={S.card}>
+        <div style={{ fontWeight: 500, marginBottom: '4px' }}>📸 Proof of e-Transfer (optional)</div>
+        <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px' }}>
+          {hasScreenshot
+            ? 'Uploaded. Organizer will see this on their dashboard.'
+            : "After you send your e-Transfer, upload a screenshot so the organizer knows it's coming."}
+        </p>
+
+        {previewUrl && (
+          <a href={previewUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginBottom: '10px' }}>
+            <img
+              src={previewUrl}
+              alt="Your e-Transfer screenshot"
+              style={{ width: '100%', borderRadius: '8px', border: '0.5px solid #eee', display: 'block' }}
+            />
+          </a>
+        )}
+
+        <input
+          ref={screenshotInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const f = e.target.files && e.target.files[0];
+            if (f) uploadScreenshot(f);
+            e.target.value = ''; // allow re-selecting same file
+          }}
+        />
+        <button
+          style={{ ...S.btn, opacity: uploadingScreenshot ? 0.6 : 1 }}
+          disabled={uploadingScreenshot}
+          onClick={() => screenshotInputRef.current && screenshotInputRef.current.click()}
+        >
+          {uploadingScreenshot
+            ? 'Uploading…'
+            : hasScreenshot ? 'Replace screenshot' : 'Upload screenshot'}
+        </button>
+      </div>
+    );
+  };
 
   // ============================================================
   // CLOSED VIEW (deadline passed, viewer not already in)
@@ -423,6 +525,9 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
               </div>
             )}
 
+            {/* Screenshot upload — only after a real pledge */}
+            {hasPledged && pledged > 0 && renderScreenshotCard()}
+
             {/* What it's for — informational only */}
             {(event.expenses || []).some(e => Number(e.amount) > 0 || e.name) && (
               <div style={S.card}>
@@ -544,6 +649,8 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
               )}
             </div>
           )}
+
+          {confirmedSelf && renderScreenshotCard()}
 
           {declined && (
             <p style={{ fontSize: '13px', color: '#777', textAlign: 'center', padding: '20px 0' }}>You've declined this invite. Tap "I'm in" if that changes.</p>
