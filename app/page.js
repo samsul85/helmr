@@ -441,8 +441,11 @@ export default function Helmr() {
       setLocTBD(!!data.locTBD);
       setOrganizerName(data.organizerName || '');
       setOrganizerEmail(data.organizerEmail || '');
-      setMode(data.mode === 'open_pool' ? 'open_pool' : 'cost_split');
-      setInviteMode(data.inviteMode === 'broadcast' ? 'broadcast' : 'personal');
+      const loadedMode = data.mode === 'open_pool' ? 'open_pool' : 'cost_split';
+      setMode(loadedMode);
+      // Cost Split only supports personal links. If a legacy event has broadcast, clamp it.
+      const loadedInviteMode = data.inviteMode === 'broadcast' ? 'broadcast' : 'personal';
+      setInviteMode(loadedMode === 'cost_split' ? 'personal' : loadedInviteMode);
       setViewCount(Number(data.viewCount) || 0);
       setGoal(Number(data.goal) || 0);
       setSuggestionAmount(Number(data.suggestionAmount) || 0);
@@ -709,7 +712,11 @@ export default function Helmr() {
           <label style={S.label}>How is this being paid for?</label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '4px' }}>
             <button
-              onClick={() => setMode('cost_split')}
+              onClick={() => {
+                setMode('cost_split');
+                // Cost Split only supports personal links — math relies on a known guest list.
+                setInviteMode('personal');
+              }}
               style={{ padding: '10px 8px', borderRadius: '10px', border: mode === 'cost_split' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: mode === 'cost_split' ? '#1a1a1a' : 'white', color: mode === 'cost_split' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
             >
               <div style={{ fontSize: '13px', fontWeight: 500 }}>Split a cost</div>
@@ -729,28 +736,32 @@ export default function Helmr() {
               : "No pressure, no fixed share. Each person decides their contribution."}
           </p>
 
-          <label style={S.label}>How are you inviting people?</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '4px' }}>
-            <button
-              onClick={() => setInviteMode('personal')}
-              style={{ padding: '10px 8px', borderRadius: '10px', border: inviteMode === 'personal' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: inviteMode === 'personal' ? '#1a1a1a' : 'white', color: inviteMode === 'personal' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
-            >
-              <div style={{ fontSize: '13px', fontWeight: 500 }}>Personal links</div>
-              <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>One link per guest, track who viewed</div>
-            </button>
-            <button
-              onClick={() => setInviteMode('broadcast')}
-              style={{ padding: '10px 8px', borderRadius: '10px', border: inviteMode === 'broadcast' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: inviteMode === 'broadcast' ? '#1a1a1a' : 'white', color: inviteMode === 'broadcast' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
-            >
-              <div style={{ fontSize: '13px', fontWeight: 500 }}>One shared link</div>
-              <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>Post in a group chat, anyone can join</div>
-            </button>
-          </div>
-          <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 14px' }}>
-            {inviteMode === 'personal'
-              ? "Add your list of guests; each gets a unique link."
-              : "No need to add names upfront — people enter their own when they chip in."}
-          </p>
+          {mode === 'open_pool' && (
+            <>
+              <label style={S.label}>How are you inviting people?</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '4px' }}>
+                <button
+                  onClick={() => setInviteMode('personal')}
+                  style={{ padding: '10px 8px', borderRadius: '10px', border: inviteMode === 'personal' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: inviteMode === 'personal' ? '#1a1a1a' : 'white', color: inviteMode === 'personal' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+                >
+                  <div style={{ fontSize: '13px', fontWeight: 500 }}>Personal links</div>
+                  <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>One link per guest, track who viewed</div>
+                </button>
+                <button
+                  onClick={() => setInviteMode('broadcast')}
+                  style={{ padding: '10px 8px', borderRadius: '10px', border: inviteMode === 'broadcast' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: inviteMode === 'broadcast' ? '#1a1a1a' : 'white', color: inviteMode === 'broadcast' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+                >
+                  <div style={{ fontSize: '13px', fontWeight: 500 }}>One shared link</div>
+                  <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>Post in a group chat, anyone can join</div>
+                </button>
+              </div>
+              <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 14px' }}>
+                {inviteMode === 'personal'
+                  ? "Add your list of guests; each gets a unique link."
+                  : "No need to add names upfront — people enter their own when they chip in."}
+              </p>
+            </>
+          )}
 
           <label style={S.label}>Your name</label>
           <input style={S.input} placeholder="e.g. Sam" value={organizerName} onChange={e => updateOrganizerName(e.target.value)} />
