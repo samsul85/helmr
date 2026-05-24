@@ -622,13 +622,27 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
           {!declined && (
             <div style={S.card}>
               <div style={S.label}>Your share</div>
-              <div style={{ fontSize: '32px', fontWeight: 500 }}>${shareIfAllJoin}</div>
-              <div style={{ fontSize: '12px', color: '#777', marginTop: '4px' }}>
-                If all {invitedCount} {invitedCount === 1 ? 'guest joins' : 'guests join'}.
-              </div>
-              {shareCurrent !== shareIfAllJoin && (
-                <div style={{ fontSize: '12px', color: '#a55', marginTop: '4px' }}>
-                  Could rise to ~${shareCurrent} if some can't make it.
+              <div style={{ fontSize: '32px', fontWeight: 500 }}>${deadlinePassed ? shareCurrent : shareIfAllJoin}</div>
+              {!deadlinePassed && (
+                <>
+                  <div style={{ fontSize: '12px', color: '#777', marginTop: '4px' }}>
+                    If all {invitedCount} {invitedCount === 1 ? 'guest joins' : 'guests join'}.
+                  </div>
+                  {shareCurrent !== shareIfAllJoin && (
+                    <div style={{ fontSize: '12px', color: '#a55', marginTop: '4px' }}>
+                      Could rise to ~${shareCurrent} if some can't make it.
+                    </div>
+                  )}
+                  {deadlineDate && (
+                    <div style={{ fontSize: '12px', color: '#085041', marginTop: '6px', fontWeight: 500 }}>
+                      Final amount locks in after {formatDeadline(deadlineDate)}.
+                    </div>
+                  )}
+                </>
+              )}
+              {deadlinePassed && (
+                <div style={{ fontSize: '12px', color: '#085041', marginTop: '4px', fontWeight: 500 }}>
+                  ✓ Final — RSVPs are closed.
                 </div>
               )}
             </div>
@@ -685,9 +699,9 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
             </p>
           )}
 
-          {confirmedSelf && (
+          {confirmedSelf && (!deadlineDate || deadlinePassed) && (
             <div style={S.card}>
-              <div style={{ fontWeight: 500, marginBottom: '8px' }}>💸 Send your share</div>
+              <div style={{ fontWeight: 500, marginBottom: '8px' }}>💸 Send your ${shareCurrent}</div>
               {organizerEmail ? (
                 <>
                   <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Interac e-Transfer to:</p>
@@ -700,7 +714,16 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
             </div>
           )}
 
-          {confirmedSelf && renderScreenshotCard()}
+          {confirmedSelf && deadlineDate && !deadlinePassed && (
+            <div style={{ ...S.card, background: '#f5f3ee', border: '0.5px dashed #c9c1ad' }}>
+              <div style={{ fontWeight: 500, marginBottom: '4px' }}>⏳ Hold off on sending money</div>
+              <p style={{ fontSize: '13px', color: '#666', margin: 0 }}>
+                You're confirmed. Once RSVPs close on <strong>{formatDeadline(deadlineDate)}</strong>, you'll see your final amount and where to send it.
+              </p>
+            </div>
+          )}
+
+          {confirmedSelf && (!deadlineDate || deadlinePassed) && renderScreenshotCard()}
 
           {declined && (
             <p style={{ fontSize: '13px', color: '#777', textAlign: 'center', padding: '20px 0' }}>You've declined this invite. Tap "I'm in" if that changes.</p>
