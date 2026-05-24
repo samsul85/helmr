@@ -479,6 +479,17 @@ export default function Helmr() {
             if (server.contributedAmount !== undefined && server.contributedAmount !== local.contributedAmount) {
               m.contributedAmount = server.contributedAmount;
             }
+            if (server.paymentScreenshotKey !== local.paymentScreenshotKey) {
+              m.paymentScreenshotKey = server.paymentScreenshotKey;
+              m.paymentScreenshotUploadedAt = server.paymentScreenshotUploadedAt;
+              // Adopt the 'paid' status that the screenshot upload set on the server
+              if (server.status === 'paid' && local.status !== 'paid') {
+                m.status = 'paid';
+              }
+            }
+            if (server.customFieldValue !== undefined && server.customFieldValue !== local.customFieldValue) {
+              m.customFieldValue = server.customFieldValue;
+            }
             return m;
           });
 
@@ -944,6 +955,16 @@ export default function Helmr() {
                     <div style={{ fontSize: '12px', color: '#777', marginTop: '4px' }}>
                       {customFieldLabel}: <span style={{ color: '#333' }}>{p.customFieldValue}</span>
                     </div>
+                  )}
+                  {!isOrganizer && p.paymentScreenshotKey && (
+                    <a
+                      href={`/api/events/${eventId}/screenshot?guestId=${p.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: 'inline-block', marginTop: '6px', fontSize: '12px', color: '#085041', textDecoration: 'none', fontWeight: 500 }}
+                    >
+                      📎 View e-Transfer screenshot
+                    </a>
                   )}
                 </div>
               );
