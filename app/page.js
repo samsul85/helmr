@@ -216,6 +216,13 @@ function ShareModal({ open, onClose, event }) {
             {copiedId === 'msg' ? '✓ Copied' : 'Copy invite message'}
           </button>
 
+          <button
+            style={{ ...S.btn, marginBottom: '8px' }}
+            onClick={() => window.open(eventBase, '_blank', 'noopener')}
+          >
+            👁 Preview as guest
+          </button>
+
           <p style={{ fontSize: '11px', color: '#999', textAlign: 'center', margin: '12px 0' }}>
             You'll see contributors show up on your dashboard as they pledge.
           </p>
@@ -271,6 +278,13 @@ function ShareModal({ open, onClose, event }) {
             </div>
           );
         })}
+
+        <button
+          style={{ ...S.btn, marginTop: '8px' }}
+          onClick={() => window.open(eventBase, '_blank', 'noopener')}
+        >
+          👁 Preview as guest (general link)
+        </button>
 
         <button style={{ ...S.btn, marginTop: '8px' }} onClick={onClose}>Done</button>
       </div>
@@ -809,11 +823,32 @@ export default function Helmr() {
                     {!isOrganizer && mode === 'cost_split' && (
                       <span style={{ ...S.pill, background: c?.bg || '#eee', color: c?.fg || '#666' }} onClick={() => cycleStatus(p.id)}>{p.status}</span>
                     )}
-                    {!isOrganizer && mode === 'open_pool' && contributed === 0 && (
-                      <span style={{ ...S.pill, background: '#eeeae0', color: '#666' }}>waiting</span>
+                    {!isOrganizer && mode === 'open_pool' && (
+                      <span
+                        style={{ ...S.pill, background: c?.bg || '#eeeae0', color: c?.fg || '#666' }}
+                        onClick={() => cycleStatus(p.id)}
+                      >
+                        {p.status === 'invited' && contributed === 0 ? 'waiting' : p.status}
+                      </span>
                     )}
                     {!isOrganizer && (
-                      <button style={{ ...S.btnGhost, padding: '4px' }} onClick={() => setPeople(people.filter(x => x.id !== p.id))} aria-label="Remove">🗑️</button>
+                      <button
+                        style={{ ...S.btnGhost, padding: '4px' }}
+                        onClick={() => {
+                          const hasContributed = Number(p.contributedAmount) > 0;
+                          const hasResponded = p.status && p.status !== 'invited';
+                          let msg = `Remove ${p.name} from this event?`;
+                          if (hasContributed) {
+                            msg = `Remove ${p.name}? They've already contributed $${Number(p.contributedAmount)}. This will erase their record from the pool and can't be undone.`;
+                          } else if (hasResponded) {
+                            msg = `Remove ${p.name}? They've already responded (${p.status}). This can't be undone.`;
+                          }
+                          if (confirm(msg)) {
+                            setPeople(people.filter(x => x.id !== p.id));
+                          }
+                        }}
+                        aria-label="Remove"
+                      >🗑️</button>
                     )}
                   </div>
                 </div>
