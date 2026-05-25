@@ -930,6 +930,19 @@ export default function Helmr() {
                     <div style={{ fontSize: '18px', fontWeight: 500 }}>{viewCount}</div>
                   </div>
                 )}
+                {tipsEnabled && (() => {
+                  const tipsTotal = people.reduce((s, p) => s + (Number(p.tipAmount) || 0), 0);
+                  const tippers = people.filter(p => Number(p.tipAmount) > 0).length;
+                  return (
+                    <div style={{ ...S.card, marginTop: '8px' }}>
+                      <div style={S.label}>🎩 Tips for you</div>
+                      <div style={{ fontSize: '18px', fontWeight: 500 }}>${tipsTotal}</div>
+                      <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
+                        {tippers === 0 ? 'No tips yet' : `From ${tippers} ${tippers === 1 ? 'person' : 'people'}`}
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             ) : (
               <>
@@ -980,6 +993,19 @@ export default function Helmr() {
                     </>
                   )}
                 </div>
+                {tipsEnabled && (() => {
+                  const tipsTotal = people.reduce((s, p) => s + (Number(p.tipAmount) || 0), 0);
+                  const tippers = people.filter(p => Number(p.tipAmount) > 0).length;
+                  return (
+                    <div style={{ ...S.card, marginTop: '8px' }}>
+                      <div style={S.label}>🎩 Tips for you</div>
+                      <div style={{ fontSize: '18px', fontWeight: 500 }}>${tipsTotal}</div>
+                      <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
+                        {tippers === 0 ? 'No tips yet' : `From ${tippers} ${tippers === 1 ? 'person' : 'people'}`}
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             )}
             {(() => {
@@ -1130,6 +1156,26 @@ export default function Helmr() {
                       {customFieldLabel}: <span style={{ color: '#333' }}>{p.customFieldValue}</span>
                     </div>
                   )}
+                  {!isOrganizer && tipsEnabled && Number(p.tipAmount) > 0 && (() => {
+                    // Show the organizer what this guest will actually e-transfer:
+                    // their share/contribution + the tip they chose to add on top.
+                    const tipAmt = Number(p.tipAmount) || 0;
+                    const baseAmt = mode === 'open_pool' ? contributed : shareAmt;
+                    const baseLabel = mode === 'open_pool' ? 'Contribution' : 'Share';
+                    return (
+                      <div style={{ marginTop: '6px', padding: '6px 8px', background: '#f5f3ee', borderRadius: '6px', fontSize: '12px', color: '#666' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{baseLabel}</span><span>${baseAmt}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                          <span>Tip 🎩</span><span>${tipAmt}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: '0.5px solid #e5e0d4', fontWeight: 500, color: '#333' }}>
+                          <span>Expected e-Transfer</span><span>${baseAmt + tipAmt}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {!isOrganizer && p.paymentScreenshotKey && (
                     <a
                       href={`/api/events/${eventId}/screenshot?guestId=${p.id}`}
