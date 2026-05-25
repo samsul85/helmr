@@ -323,7 +323,7 @@ export default function Helmr() {
   const [dateTBD, setDateTBD] = useState(false);
   const [locTBD, setLocTBD] = useState(false);
   const [tab, setTab] = useState('overview');
-  const [tip, setTip] = useState(0);
+  const [tipsEnabled, setTipsEnabled] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -370,19 +370,15 @@ export default function Helmr() {
 
   // Per-person shares: compute each person's expected total across all expenses
   // they're on (using per-expense participant lists when set, else "everyone").
-  // The tip is split equally across all confirmed people, since it's a planner
-  // thank-you, not tied to any particular expense.
+  // Note: planner tips (event.tipsEnabled) are voluntary per-guest add-ons,
+  // NOT folded into the split. Each guest's tip lives on their person row as
+  // `tipAmount` and is sent to the organizer alongside their share.
   const shareOpts = { confirmedOnly: true, includeOrganizer: organizerIncludedInSplit };
-  const tipPerPerson = confirmed > 0 ? Number(tip) / confirmed : 0;
   const peopleShares = people.map(p => {
     const includedInAnyExpense = p.role === 'organizer' ? organizerIncludedInSplit : true;
     if (!includedInAnyExpense) return { id: p.id, share: 0, breakdown: [] };
     const { share, breakdown } = computePersonShare(p.id, expenses, people, shareOpts);
-    // Add tip share if this person is "confirmed" in the split (org via toggle, guests via status)
-    const isConfirmedForTip = p.role === 'organizer'
-      ? organizerIncludedInSplit
-      : (p.status === 'confirmed' || p.status === 'paid');
-    return { id: p.id, share: share + (isConfirmedForTip ? tipPerPerson : 0), breakdown };
+    return { id: p.id, share, breakdown };
   });
   // Average + range for the Overview card. If all expenses default to everyone,
   // every person's share is identical and min === max === avg.
@@ -454,7 +450,7 @@ export default function Helmr() {
       setResponseDeadline(isoToDatetimeLocal(data.responseDeadline || ''));
       setPeople(data.people || [{ id: 'organizer', name: 'You', status: 'organizer', role: 'organizer' }]);
       setExpenses(data.expenses || []);
-      setTip(Number(data.tip) || 0);
+      setTipsEnabled(!!data.tipsEnabled);
       setScreen('dashboard');
     } catch {
       alert("Couldn't load event.");
@@ -487,7 +483,7 @@ export default function Helmr() {
             suggestionAmount: Number(suggestionAmount) || 0, suggestionUnit,
             customFieldLabel,
             responseDeadline: datetimeLocalToIso(responseDeadline),
-            people, expenses, tip: Number(tip) || 0,
+            people, expenses, tipsEnabled,
             knownGuestIds: Array.from(knownGuestIdsRef.current),
           }),
         });
@@ -499,7 +495,7 @@ export default function Helmr() {
       }
     }, 800);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, organizerEmail, mode, inviteMode, goal, suggestionAmount, suggestionUnit, customFieldLabel, responseDeadline, people, expenses, tip]);
+  }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, organizerEmail, mode, inviteMode, goal, suggestionAmount, suggestionUnit, customFieldLabel, responseDeadline, people, expenses, tipsEnabled]);
 
   // Poll for server-side guest changes (viewedAt, RSVP status, broadcast signups, view counter)
   useEffect(() => {
@@ -597,7 +593,7 @@ export default function Helmr() {
     setCustomFieldLabel('');
     setResponseDeadline('');
     setViewCount(0);
-    setTip(0);
+    setTipsEnabled(false);
     setExpenses([]);
     setPeople([{ id: 'organizer', name: organizerName || 'You', status: 'paid', role: 'organizer' }]);
     setTab('overview');
@@ -639,7 +635,7 @@ export default function Helmr() {
           suggestionAmount: Number(suggestionAmount) || 0, suggestionUnit,
           customFieldLabel,
           responseDeadline: datetimeLocalToIso(responseDeadline),
-          people, expenses, tip: Number(tip) || 0,
+          people, expenses, tipsEnabled,
         }),
       });
       if (!res.ok) throw new Error('Failed');
@@ -827,6 +823,20 @@ export default function Helmr() {
             {mode === 'cost_split'
               ? 'When RSVPs close. After this, guests see their final share and where to send funds.'
               : 'After this, new people can\u2019t join. Already-confirmed guests can still pay.'}
+          </p>
+          <div style={{ height: '14px' }} />
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#f5f3ee', borderRadius: '10px', cursor: 'pointer', marginBottom: '4px' }}>
+            <input
+              type="checkbox"
+              checked={tipsEnabled}
+              onChange={e => setTipsEnabled(e.target.checked)}
+              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: '14px', fontWeight: 500 }}>🎩 Allow guests to tip the planner</span>
+          </label>
+          <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>
+            Shows a "thank the planner" prompt on the guest invite. Default is $0 — no pressure.
           </p>
           <div style={{ height: '14px' }} />
 
@@ -1346,12 +1356,34 @@ export default function Helmr() {
               <input style={S.input} type="email" placeholder="you@example.com" value={organizerEmail} onChange={e => setOrganizerEmail(e.target.value)} />
             </div>
             <div style={S.card}>
-              <div style={{ fontWeight: 500, marginBottom: '4px' }}>🎩 Tip the planner</div>
-              <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Optional add-on for the organizer's time</p>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span>$</span>
-                <input style={S.input} type="number" value={tip} onChange={e => setTip(e.target.value)} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500, marginBottom: '4px' }}>🎩 Tip the planner</div>
+                  <p style={{ fontSize: '12px', color: '#777', margin: 0 }}>
+                    Show guests an optional tip prompt when they opt in. Defaults to $0 — no pressure.
+                  </p>
+                </div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', paddingTop: '2px' }}>
+                  <input
+                    type="checkbox"
+                    checked={tipsEnabled}
+                    onChange={e => setTipsEnabled(e.target.checked)}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                </label>
               </div>
+              {tipsEnabled && (() => {
+                const tipsTotal = people.reduce((s, p) => s + (Number(p.tipAmount) || 0), 0);
+                const tippers = people.filter(p => Number(p.tipAmount) > 0).length;
+                return (
+                  <div style={{ marginTop: '10px', padding: '8px 10px', background: '#f5f3ee', borderRadius: '8px', fontSize: '13px', color: '#666' }}>
+                    {tippers === 0
+                      ? 'No tips received yet.'
+                      : <>Received: <strong>${tipsTotal}</strong> from {tippers} {tippers === 1 ? 'person' : 'people'}.</>
+                    }
+                  </div>
+                );
+              })()}
             </div>
             <div style={S.card}>
               <div style={{ fontWeight: 500, marginBottom: '4px' }}>🎁 Surprise gift</div>
