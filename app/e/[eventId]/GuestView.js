@@ -81,6 +81,34 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
   const [screenshotCacheBust, setScreenshotCacheBust] = useState(0);
   const screenshotInputRef = useRef(null);
 
+  // Planner tip — voluntary add-on, only if organizer enabled tipping.
+  const tipsEnabled = !!event.tipsEnabled;
+  const [guestTip, setGuestTip] = useState(Number(initialGuest?.tipAmount) || 0);
+  const [savingTip, setSavingTip] = useState(false);
+  const sendTip = async (amount) => {
+    if (preview) {
+      setGuestTip(amount);
+      return;
+    }
+    if (!guestId) return;
+    try {
+      setSavingTip(true);
+      const res = await fetch(`/api/events/${event.id}/tip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guestId, amount }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGuestTip(Number(data.tipAmount) || 0);
+      }
+    } catch (e) {
+      console.error('tip save failed', e);
+    } finally {
+      setSavingTip(false);
+    }
+  };
+
   const uploadScreenshot = async (file) => {
     if (preview) {
       alert("Preview mode — guests will be able to do this for real.");
@@ -270,18 +298,11 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
   // The labels stay consistent with the existing UX from the broadcast-mode build.
   const organizerRow = (event.people || []).find(p => p.role === 'organizer');
   const organizerInSplit = !!(organizerRow && organizerRow.includedInSplit);
-  const tipTotal = Number(event.tip || 0);
 
   // For "if all join": treat every guest as confirmed.
   const allJoinPeople = peopleWithMyStatus.map(p =>
     p.role === 'organizer' ? p : { ...p, status: 'confirmed' }
   );
-  const allJoinConfirmedCount = allJoinPeople.filter(p =>
-    p.role === 'organizer' ? organizerInSplit : true
-  ).length;
-  const currentConfirmedCount = peopleWithMyStatus.filter(p =>
-    p.role === 'organizer' ? organizerInSplit : (p.status === 'confirmed' || p.status === 'paid')
-  ).length;
 
   let shareIfAllJoin = 0;
   let shareCurrent = 0;
@@ -294,17 +315,14 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
       confirmedOnly: true,
       includeOrganizer: organizerInSplit,
     });
-    const tipIfAll = allJoinConfirmedCount > 0 ? tipTotal / allJoinConfirmedCount : 0;
-    const tipNow = currentConfirmedCount > 0 ? tipTotal / currentConfirmedCount : 0;
-    shareIfAllJoin = Math.round(ifAll + tipIfAll);
-    shareCurrent = Math.round(now + tipNow);
+    shareIfAllJoin = Math.round(ifAll);
+    shareCurrent = Math.round(now);
   } else {
     // Fallback (no guestId — preview or pre-RSVP broadcast): flat average
     const denomConfirmed = confirmedGuests > 0 ? confirmedGuests : 1;
     const denomInvited = invitedCount > 0 ? invitedCount : 1;
-    const totalWithTip = total + tipTotal;
-    shareIfAllJoin = Math.round(totalWithTip / denomInvited);
-    shareCurrent = Math.round(totalWithTip / denomConfirmed);
+    shareIfAllJoin = Math.round(total / denomInvited);
+    shareCurrent = Math.round(total / denomConfirmed);
   }
 
   // For "What we're covering" breakdown: which expenses is this guest on?
@@ -368,6 +386,66 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
             ? 'Uploading…'
             : hasScreenshot ? 'Replace screenshot' : 'Upload screenshot'}
         </button>
+      </div>
+    );
+  };
+
+  // Tip the planner card — only when organizer has enabled tipping.
+  // Soft, non-pressuring framing. Default is $0. Chips for quick selection + custom field.
+  const renderTipCard = () => {
+    if (!tipsEnabled) return null;
+    const presets = [0, 5, 10, 20];
+    const isPreset = presets.includes(guestTip);
+    const planner = event.organizerName || 'the planner';
+    return (
+      <div style={S.card}>
+        <div style={{ fontWeight: 500, marginBottom: '4px' }}>🎩 Tip {planner}?</div>
+        <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px' }}>
+          Totally optional — {planner} organized this on their own time. Stays $0 unless you choose to add.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '8px' }}>
+          {presets.map(p => (
+            <button
+              key={p}
+              disabled={savingTip}
+              onClick={() => sendTip(p)}
+              style={{
+                padding: '10px 4px',
+                borderRadius: '8px',
+                border: guestTip === p ? '2px solid #085041' : '0.5px solid #ddd',
+                background: guestTip === p ? '#e1f5ee' : 'white',
+                color: guestTip === p ? '#085041' : '#333',
+                fontSize: '14px',
+                fontWeight: 500,
+                cursor: savingTip ? 'wait' : 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {p === 0 ? 'No tip' : `$${p}`}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '13px', color: '#666' }}>Custom:</span>
+          <span style={{ fontSize: '14px', color: '#666' }}>$</span>
+          <input
+            type="number"
+            min="0"
+            inputMode="numeric"
+            disabled={savingTip}
+            value={isPreset ? '' : (guestTip || '')}
+            placeholder="0"
+            onChange={e => {
+              const v = Math.max(0, Number(e.target.value) || 0);
+              setGuestTip(v);
+            }}
+            onBlur={e => {
+              const v = Math.max(0, Number(e.target.value) || 0);
+              sendTip(v);
+            }}
+            style={{ ...S.input, padding: '6px 8px', fontSize: '14px', flex: 1 }}
+          />
+        </div>
       </div>
     );
   };
@@ -521,6 +599,24 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
                 <div style={{ fontSize: '13px', color: '#777' }}>Your contribution</div>
                 <div style={{ fontSize: '28px', fontWeight: 500, color: '#085041' }}>${pledged}</div>
                 <p style={{ fontSize: '12px', color: '#777', margin: '8px 0 0' }}>Thanks! Send your e-Transfer below.</p>
+                {tipsEnabled && guestTip > 0 && (
+                  <>
+                    <div style={{ height: '0.5px', background: '#eee', margin: '12px 0 8px' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666' }}>
+                      <span>Contribution</span>
+                      <span>${pledged}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666', marginTop: '4px' }}>
+                      <span>Tip 🎩</span>
+                      <span>${guestTip}</span>
+                    </div>
+                    <div style={{ height: '0.5px', background: '#eee', margin: '8px 0' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 500 }}>
+                      <span>Total</span>
+                      <span>${pledged + guestTip}</span>
+                    </div>
+                  </>
+                )}
                 <button
                   style={{ ...S.btn, marginTop: '10px' }}
                   onClick={() => { setPledged(null); setAmount(String(pledged)); }}
@@ -559,15 +655,23 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
               </div>
             )}
 
+            {/* Tip prompt — only when organizer has enabled tipping and guest has pledged */}
+            {hasPledged && pledged > 0 && renderTipCard()}
+
             {/* Interac instructions — only after pledging > 0 */}
             {hasPledged && pledged > 0 && (
               <div style={S.card}>
-                <div style={{ fontWeight: 500, marginBottom: '8px' }}>💸 Send your ${pledged}</div>
+                <div style={{ fontWeight: 500, marginBottom: '8px' }}>💸 Send ${pledged + guestTip}</div>
                 {organizerEmail ? (
                   <>
                     <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Interac e-Transfer to:</p>
                     <div style={{ background: '#f5f3ee', padding: '10px 12px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '14px', wordBreak: 'break-all' }}>{organizerEmail}</div>
-                    <p style={{ fontSize: '11px', color: '#999', margin: '8px 0 0' }}>Include event code: {event.id.toUpperCase()}</p>
+                    {tipsEnabled && guestTip > 0 && (
+                      <p style={{ fontSize: '11px', color: '#666', margin: '8px 0 0' }}>
+                        ${pledged} contribution + ${guestTip} tip = <strong>${pledged + guestTip}</strong>
+                      </p>
+                    )}
+                    <p style={{ fontSize: '11px', color: '#999', margin: '6px 0 0' }}>Include event code: {event.id.toUpperCase()}</p>
                   </>
                 ) : (
                   <p style={{ fontSize: '12px', color: '#a55', margin: 0 }}>The organizer hasn't added their Interac email yet. Contact them directly.</p>
@@ -645,6 +749,24 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
                   ✓ Final — RSVPs are closed.
                 </div>
               )}
+              {tipsEnabled && confirmedSelf && guestTip > 0 && (
+                <>
+                  <div style={{ height: '0.5px', background: '#eee', margin: '12px 0 8px' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666' }}>
+                    <span>Your share</span>
+                    <span>${deadlinePassed ? shareCurrent : shareIfAllJoin}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666', marginTop: '4px' }}>
+                    <span>Tip 🎩</span>
+                    <span>${guestTip}</span>
+                  </div>
+                  <div style={{ height: '0.5px', background: '#eee', margin: '8px 0' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 500 }}>
+                    <span>Total</span>
+                    <span>${(deadlinePassed ? shareCurrent : shareIfAllJoin) + guestTip}</span>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -699,14 +821,21 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
             </p>
           )}
 
+          {confirmedSelf && renderTipCard()}
+
           {confirmedSelf && (!deadlineDate || deadlinePassed) && (
             <div style={S.card}>
-              <div style={{ fontWeight: 500, marginBottom: '8px' }}>💸 Send your ${shareCurrent}</div>
+              <div style={{ fontWeight: 500, marginBottom: '8px' }}>💸 Send ${shareCurrent + guestTip}</div>
               {organizerEmail ? (
                 <>
                   <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Interac e-Transfer to:</p>
                   <div style={{ background: '#f5f3ee', padding: '10px 12px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '14px', wordBreak: 'break-all' }}>{organizerEmail}</div>
-                  <p style={{ fontSize: '11px', color: '#999', margin: '8px 0 0' }}>Include event code: {event.id.toUpperCase()}</p>
+                  {tipsEnabled && guestTip > 0 && (
+                    <p style={{ fontSize: '11px', color: '#666', margin: '8px 0 0' }}>
+                      ${shareCurrent} share + ${guestTip} tip = <strong>${shareCurrent + guestTip}</strong>
+                    </p>
+                  )}
+                  <p style={{ fontSize: '11px', color: '#999', margin: '6px 0 0' }}>Include event code: {event.id.toUpperCase()}</p>
                 </>
               ) : (
                 <p style={{ fontSize: '12px', color: '#a55', margin: 0 }}>The organizer hasn't added their Interac email yet. Contact them directly.</p>
@@ -718,7 +847,7 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
             <div style={{ ...S.card, background: '#f5f3ee', border: '0.5px dashed #c9c1ad' }}>
               <div style={{ fontWeight: 500, marginBottom: '4px' }}>⏳ Hold off on sending money</div>
               <p style={{ fontSize: '13px', color: '#666', margin: 0 }}>
-                You're confirmed. Once RSVPs close on <strong>{formatDeadline(deadlineDate)}</strong>, you'll see your final amount and where to send it.
+                You're confirmed. Once RSVPs close on <strong>{formatDeadline(deadlineDate)}</strong>, you'll see your final amount{tipsEnabled && guestTip > 0 ? ' (share + tip)' : ''} and where to send it.
               </p>
             </div>
           )}
