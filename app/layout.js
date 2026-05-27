@@ -1,4 +1,6 @@
 import { Analytics } from '@vercel/analytics/next';
+import { Suspense } from 'react';
+import { PostHogProvider } from './posthog-provider';
 
 export const metadata = {
   title: 'Helmr — Take the helm of your next group plan',
@@ -13,7 +15,11 @@ export default function RootLayout({ children }) {
         <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%93%3C/text%3E%3C/svg%3E" />
       </head>
       <body style={{ margin: 0, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', background: '#f5f3ee', color: '#1a1a1a' }}>
-        {children}
+        <Suspense fallback={null}>
+          <PostHogProvider>
+            {children}
+          </PostHogProvider>
+        </Suspense>
         <Analytics />
       </body>
     </html>
