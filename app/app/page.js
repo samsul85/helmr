@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { participantsForExpense, computePersonShare } from '../lib/shares';
+import { participantsForExpense, computePersonShare } from '../../lib/shares';
 
 // ============ CONFIG ============
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mredzlyn';
