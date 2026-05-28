@@ -216,7 +216,7 @@ export default function LandingPage() {
           </a>
         </div>
         <p style={S.context}>
-          Early prototype · Two real groups have used it · Feedback welcome
+          Early prototype · Feedback welcome
         </p>
       </section>
 
