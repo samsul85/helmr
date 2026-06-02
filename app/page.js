@@ -163,12 +163,16 @@ const S = {
 };
 
 export default function LandingPage() {
-  useEffect(() => {
-    // Track landing-page view explicitly so we can see it in PostHog separately
-    // from in-app navigation. (The provider also fires $pageview automatically.)
+useEffect(() => {
     if (typeof window !== 'undefined' && window.posthog) {
       window.posthog.capture('landing_page_viewed');
     }
+    // If user lands here after clicking a magic link, redirect to /app
+    supabase.auth.getSession().then(({ data }) => {
+      if (data?.session) {
+        window.location.href = '/app';
+      }
+    });
   }, []);
 
   const onTryClick = () => {
