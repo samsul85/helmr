@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { supabase } from '../../lib/supabase';
+import Auth from '../../components/Auth';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
 
 // ============ CONFIG ============
@@ -320,8 +322,18 @@ function ShareModal({ open, onClose, event }) {
 }
 
 export default function Helmr() {
-  const [screen, setScreen] = useState('welcome');
-  const [eventId, setEventId] = useState(null);
+const [session, setSession] = useState(undefined);
+useEffect(() => {
+  supabase.auth.getSession().then(({ data }) => {
+    setSession(data?.session ?? null);
+  }).catch(() => setSession(null));
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    setSession(session ?? null);
+  });
+  return () => subscription.unsubscribe();
+}, []);
+if (session === undefined) return <div style={{ minHeight: '100vh', background: '#f5f3ee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ fontSize: '36px' }}>⚓</div></div>;
+if (session === null) return <Auth />;  const [eventId, setEventId] = useState(null);
   const [eventType, setEventType] = useState(null);
   const [eventName, setEventName] = useState('');
   const [eventDate, setEventDate] = useState('');
