@@ -10,7 +10,7 @@
 // after the Tricia call confirms (or reframes) the niche.
 
 import { useEffect } from 'react';
-
+import { supabase } from '../lib/supabase';
 const WAITLIST_URL = 'https://forms.gle/N1Hj3eh2VGiTApVi7';
 
 const S = {
