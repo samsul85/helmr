@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Auth from '../../components/Auth';
+import { getSupabaseClient } from '../../lib/supabase';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
 
 // ============ CONFIG ============
@@ -320,6 +322,8 @@ function ShareModal({ open, onClose, event }) {
 }
 
 export default function Helmr() {
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [screen, setScreen] = useState('welcome');
   const [eventId, setEventId] = useState(null);
   const [eventType, setEventType] = useState(null);
@@ -361,6 +365,26 @@ export default function Helmr() {
   };
 
   const [savedEvents, setSavedEvents] = useState([]);
+  useEffect(() => {
+    let mounted = true;
+    const supabase = getSupabaseClient();
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
   useEffect(() => { setSavedEvents(loadSavedEvents()); }, []);
 
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
@@ -1447,6 +1471,20 @@ export default function Helmr() {
       </div>
     );
   };
+
+  if (authLoading) {
+    return (
+      <div style={S.page}>
+        <div style={{ ...S.frame, minHeight: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '14px' }}>
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Auth />;
+  }
 
   return (
     <div style={S.page}>
