@@ -322,24 +322,24 @@ function ShareModal({ open, onClose, event }) {
 }
 
 export default function Helmr() {
-const [session, setSession] = useState(undefined);
-useEffect(() => {
-  supabase.auth.getSession().then(({ data }) => {
-    setSession(data?.session ?? null);
-  }).catch(() => setSession(null));
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-    setSession(session ?? null);
-  });
-  return () => subscription.unsubscribe();
-}, []);
-if (session === undefined) return <div style={{ minHeight: '100vh', background: '#f5f3ee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ fontSize: '36px' }}>⚓</div></div>;
-if (session === null) return <Auth />;  const [eventId, setEventId] = useState(null);
+  const [session, setSession] = useState(undefined);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data?.session ?? null);
+    }).catch(() => setSession(null));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+  const [eventId, setEventId] = useState(null);
   const [eventType, setEventType] = useState(null);
   const [eventName, setEventName] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [eventLoc, setEventLoc] = useState('');
   const [dateTBD, setDateTBD] = useState(false);
   const [locTBD, setLocTBD] = useState(false);
+  const [screen, setScreen] = useState('welcome');
   const [tab, setTab] = useState('overview');
   const [tipsEnabled, setTipsEnabled] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -1459,6 +1459,16 @@ if (session === null) return <Auth />;  const [eventId, setEventId] = useState(n
       </div>
     );
   };
+
+  if (session === undefined) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#f5f3ee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: '36px' }}>⚓</div>
+      </div>
+    );
+  }
+
+  if (session === null) return <Auth />;
 
   return (
     <div style={S.page}>
