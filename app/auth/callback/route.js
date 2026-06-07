@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../../../../lib/supabase-config';
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../../../lib/supabase-config';
 
 export async function GET(request) {
   const requestUrl = new URL(request.url);
