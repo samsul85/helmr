@@ -389,11 +389,25 @@ export default function Helmr() {
     let mounted = true;
     const supabase = getSupabaseClient();
 
-    supabase.auth.getSession().then(({ data }) => {
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const queryParams = new URLSearchParams(window.location.search);
+    const hasAuthToken =
+      hashParams.has('access_token') ||
+      hashParams.has('refresh_token') ||
+      queryParams.has('code');
+
+    const loadSession = async () => {
+      if (hasAuthToken) {
+        await new Promise(resolve => setTimeout(resolve, 600));
+      }
+
+      const { data } = await supabase.auth.getSession();
       if (!mounted) return;
       setSession(data.session);
       setAuthLoading(false);
-    });
+    };
+
+    loadSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
