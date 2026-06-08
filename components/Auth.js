@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
 
+const MAGIC_LINK_REDIRECT_TO = 'https://helmr-git-v2-samsul85s-projects.vercel.app/auth/callback';
+
 const S = {
   page: {
     minHeight: '100vh',
@@ -99,11 +101,10 @@ export default function Auth() {
 
     try {
       const supabase = getSupabaseClient();
-      const redirectTo = `${window.location.origin}/auth/callback`;
       const { error: signInError } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: redirectTo,
+          emailRedirectTo: MAGIC_LINK_REDIRECT_TO,
         },
       });
 
