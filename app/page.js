@@ -33,9 +33,9 @@ const S = {
     boxSizing: 'border-box',
   },
   brand: {
-    fontSize: '20px',
-    fontWeight: 600,
-    letterSpacing: '-0.01em',
+    height: '32px',
+    width: 'auto',
+    display: 'block',
   },
   navLink: {
     fontSize: '14px',
@@ -62,6 +62,12 @@ const S = {
     fontWeight: 500,
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
+    marginBottom: '24px',
+  },
+  heroLogo: {
+    height: '48px',
+    width: 'auto',
+    display: 'block',
     marginBottom: '24px',
   },
   headline: {
@@ -185,11 +191,12 @@ export default function LandingPage() {
   return (
     <div style={S.page}>
       <nav style={S.nav}>
-        <div style={S.brand}>⚓ Helmr</div>
+        <img src="/logo.svg" alt="Helmr" style={S.brand} />
         <a href="/app" style={S.navLink} onClick={onTryClick}>Open app →</a>
       </nav>
 
       <section style={S.hero}>
+        <img src="/logo.svg" alt="" aria-hidden="true" style={S.heroLogo} />
         <div style={S.eyebrow}>For Canadian groups</div>
         <h1 style={S.headline}>
           Plan group events and coordinate money in one place.
