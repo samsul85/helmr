@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { put, get, del } from '@vercel/blob';
 import { getEvent, updateEvent } from '@/lib/events';
-import { sendOrganizerLiveNotification } from '@/lib/email';
+import { createOrganizerNotificationEmail, sendEmail } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -82,11 +82,18 @@ export async function POST(request, { params }) {
 
     const updated = await updateEvent(params.eventId, { people });
     const guest = updated.people.find(p => p.id === guestId);
-    await sendOrganizerLiveNotification({
+    const email = createOrganizerNotificationEmail({
       event: updated,
       whatHappened: 'Payment screenshot uploaded',
       actorName: guest?.name || existing.name || 'Guest',
     });
+    if (email) {
+      try {
+        await sendEmail(email);
+      } catch (emailError) {
+        console.error('Payment screenshot notification email failed:', emailError);
+      }
+    }
 
     return NextResponse.json({ ok: true });
   } catch (err) {

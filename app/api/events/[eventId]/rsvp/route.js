@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getEvent, updateEvent } from '@/lib/events';
-import { sendOrganizerLiveNotification } from '@/lib/email';
+import { createOrganizerNotificationEmail, sendEmail } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -52,11 +52,18 @@ export async function POST(request, { params }) {
 
     const updated = await updateEvent(params.eventId, { people });
     const guest = updated.people.find(p => p.id === guestId);
-    await sendOrganizerLiveNotification({
+    const email = createOrganizerNotificationEmail({
       event: updated,
       whatHappened: `RSVP updated to ${guest?.status || status}`,
       actorName: guest?.name || 'Guest',
     });
+    if (email) {
+      try {
+        await sendEmail(email);
+      } catch (emailError) {
+        console.error('RSVP notification email failed:', emailError);
+      }
+    }
 
     return NextResponse.json({ ok: true, status: guest?.status });
   } catch (err) {
