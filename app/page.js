@@ -33,7 +33,7 @@ const S = {
     boxSizing: 'border-box',
   },
   brand: {
-    height: '32px',
+    height: '40px',
     width: 'auto',
     display: 'block',
   },
@@ -65,7 +65,7 @@ const S = {
     marginBottom: '24px',
   },
   heroLogo: {
-    height: '48px',
+    height: '72px',
     width: 'auto',
     display: 'block',
     marginBottom: '24px',
