@@ -68,6 +68,24 @@ function removeEventFromLocal(id) {
   } catch {}
 }
 
+function normalizeSavedEvent(event) {
+  if (!event || !event.id) return null;
+  return {
+    id: event.id,
+    name: event.name || event.eventName || 'Untitled event',
+    updatedAt: Number(event.updatedAt || event.createdAt) || Date.now(),
+  };
+}
+
+async function fetchUserEventSummaries() {
+  const res = await fetch('/api/user/events');
+  if (!res.ok) throw new Error('Failed to load user events');
+  const data = await res.json();
+  return Array.isArray(data.events)
+    ? data.events.map(normalizeSavedEvent).filter(Boolean)
+    : [];
+}
+
 const S = {
   page: { minHeight: '100vh', background: '#f5f3ee', padding: '12px', boxSizing: 'border-box' },
   frame: { maxWidth: '420px', margin: '0 auto', background: 'white', borderRadius: '20px', minHeight: '85vh', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' },
@@ -365,6 +383,7 @@ export default function Helmr() {
   };
 
   const [savedEvents, setSavedEvents] = useState([]);
+  const [userEventsLoading, setUserEventsLoading] = useState(false);
   useEffect(() => {
     let mounted = true;
     const supabase = getSupabaseClient();
@@ -385,7 +404,28 @@ export default function Helmr() {
       subscription.unsubscribe();
     };
   }, []);
-  useEffect(() => { setSavedEvents(loadSavedEvents()); }, []);
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setSavedEvents([]);
+      setUserEventsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setUserEventsLoading(true);
+    fetchUserEventSummaries()
+      .then(events => {
+        if (!cancelled) setSavedEvents(events);
+      })
+      .catch(() => {
+        if (!cancelled) setSavedEvents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setUserEventsLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
 
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   // Cost Split: organizer only counts as "confirmed" (and gets a share of the bill)
@@ -451,7 +491,7 @@ export default function Helmr() {
         if (res.status === 404) {
           alert('That event has expired or was deleted.');
           removeEventFromLocal(id);
-          setSavedEvents(loadSavedEvents());
+          setSavedEvents(prev => prev.filter(e => e.id !== id));
         } else {
           alert("Couldn't load event.");
         }
@@ -606,6 +646,14 @@ export default function Helmr() {
   // Reset all event state so "Plan something new" starts from a clean slate.
   // Without this, fields from the previously-open event leak into the new one.
   const startNewEvent = () => {
+    if (userEventsLoading) {
+      alert('Still loading your events — please try again in a moment.');
+      return;
+    }
+    if (savedEvents.length >= 1) {
+      alert('Upgrade to Pro to create unlimited events');
+      return;
+    }
     setEventId(null);
     setEventType(null);
     setEventName('');
@@ -655,10 +703,26 @@ export default function Helmr() {
     }
     try {
       setSaving(true);
+      const supabase = getSupabaseClient();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        setSession(null);
+        alert('Please sign in again.');
+        return;
+      }
+
+      const ownedEvents = await fetchUserEventSummaries();
+      setSavedEvents(ownedEvents);
+      if (ownedEvents.length >= 1) {
+        alert('Upgrade to Pro to create unlimited events');
+        return;
+      }
+
       const res = await fetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ownerId: user.id,
           eventType, eventName, eventDate, eventLoc, dateTBD, locTBD,
           organizerName, organizerEmail,
           mode, inviteMode, goal: Number(goal) || 0,
@@ -668,11 +732,19 @@ export default function Helmr() {
           people, expenses, tipsEnabled,
         }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.error === 'Upgrade to Pro to create unlimited events') {
+          alert('Upgrade to Pro to create unlimited events');
+          return;
+        }
+        throw new Error('Failed');
+      }
       const data = await res.json();
       setEventId(data.id);
       saveEventToLocal({ id: data.id, name: eventName || 'Untitled event', updatedAt: Date.now() });
-      setSavedEvents(loadSavedEvents());
+      const savedEvent = normalizeSavedEvent(data);
+      setSavedEvents(savedEvent ? [savedEvent] : []);
       setScreen('dashboard');
     } catch (e) {
       alert("Couldn't save event — please try again.");
@@ -688,6 +760,12 @@ export default function Helmr() {
         <h1 style={{ fontSize: '32px', margin: '8px 0 4px', fontWeight: 500 }}>Helmr</h1>
         <p style={{ fontSize: '15px', color: '#666', margin: '0 0 24px' }}>Take the helm of your next group plan</p>
 
+        {userEventsLoading && (
+          <p style={{ fontSize: '13px', color: '#777', margin: '0 0 16px' }}>
+            Loading your events...
+          </p>
+        )}
+
         {savedEvents.length > 0 && (
           <div style={{ textAlign: 'left', marginBottom: '24px' }}>
             <div style={{ fontSize: '11px', color: '#999', letterSpacing: '0.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Your events</div>
@@ -697,7 +775,7 @@ export default function Helmr() {
                   <div style={{ fontSize: '14px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.name}</div>
                   <div style={{ fontSize: '11px', color: '#999', fontFamily: 'monospace' }}>{ev.id}</div>
                 </div>
-                <button style={{ ...S.btnGhost, fontSize: '11px', padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); if (confirm(`Remove "${ev.name}" from this device? (The event itself isn't deleted.)`)) { removeEventFromLocal(ev.id); setSavedEvents(loadSavedEvents()); } }}>✕</button>
+                <button style={{ ...S.btnGhost, fontSize: '11px', padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); if (confirm(`Remove "${ev.name}" from this list? (The event itself isn't deleted.)`)) { removeEventFromLocal(ev.id); setSavedEvents(prev => prev.filter(x => x.id !== ev.id)); } }}>✕</button>
               </div>
             ))}
           </div>
