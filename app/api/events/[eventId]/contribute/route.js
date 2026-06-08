@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { setGuestContribution, addBroadcastContribution } from '@/lib/events';
+import { sendOrganizerLiveNotification } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -34,6 +35,13 @@ export async function POST(request, { params }) {
     if (result.closed) {
       return NextResponse.json({ error: 'Event is closed to new contributions.' }, { status: 410 });
     }
+    const guest = result.event.people.find(p => p.id === result.guestId);
+    await sendOrganizerLiveNotification({
+      event: result.event,
+      whatHappened: `Broadcast contribution pledged: $${Math.round(amt).toLocaleString()}`,
+      actorName: guest?.name || cleanName,
+    });
+
     return NextResponse.json({ ok: true, guestId: result.guestId });
   } catch (err) {
     console.error('POST contribute error:', err);

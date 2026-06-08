@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getEvent, updateEvent } from '@/lib/events';
+import { sendOrganizerLiveNotification } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -50,7 +51,14 @@ export async function POST(request, { params }) {
     });
 
     const updated = await updateEvent(params.eventId, { people });
-    return NextResponse.json({ ok: true, status: updated.people.find(p => p.id === guestId)?.status });
+    const guest = updated.people.find(p => p.id === guestId);
+    await sendOrganizerLiveNotification({
+      event: updated,
+      whatHappened: `RSVP updated to ${guest?.status || status}`,
+      actorName: guest?.name || 'Guest',
+    });
+
+    return NextResponse.json({ ok: true, status: guest?.status });
   } catch (err) {
     console.error('POST rsvp error:', err);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

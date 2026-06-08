@@ -51,6 +51,7 @@ export async function POST(request) {
       goal: Number(body.goal) || 0,
       suggestionAmount: Number(body.suggestionAmount) || 0,
       suggestionUnit: body.suggestionUnit || '',
+      notificationPreference: body.notificationPreference === 'digest' ? 'digest' : 'live',
       people: body.people || [],
       expenses: body.expenses || [],
       tip: Number(body.tip) || 0,

@@ -366,6 +366,7 @@ export default function Helmr() {
   const [suggestionAmount, setSuggestionAmount] = useState(0);
   const [suggestionUnit, setSuggestionUnit] = useState('per person');
   const [customFieldLabel, setCustomFieldLabel] = useState(''); // e.g. "Child's name"; empty = feature off
+  const [notificationPreference, setNotificationPreference] = useState('live'); // 'live' | 'digest'
   const [responseDeadline, setResponseDeadline] = useState(''); // datetime-local string or ''
   const [people, setPeople] = useState([
     { id: 'organizer', name: 'You', status: 'paid', role: 'organizer' },
@@ -517,6 +518,7 @@ export default function Helmr() {
       setSuggestionAmount(Number(data.suggestionAmount) || 0);
       setSuggestionUnit(data.suggestionUnit || 'per person');
       setCustomFieldLabel(data.customFieldLabel || '');
+      setNotificationPreference(data.notificationPreference === 'digest' ? 'digest' : 'live');
       setResponseDeadline(isoToDatetimeLocal(data.responseDeadline || ''));
       setPeople(data.people || [{ id: 'organizer', name: 'You', status: 'organizer', role: 'organizer' }]);
       setExpenses(data.expenses || []);
@@ -552,6 +554,7 @@ export default function Helmr() {
             mode, inviteMode, goal: Number(goal) || 0,
             suggestionAmount: Number(suggestionAmount) || 0, suggestionUnit,
             customFieldLabel,
+            notificationPreference,
             responseDeadline: datetimeLocalToIso(responseDeadline),
             people, expenses, tipsEnabled,
             knownGuestIds: Array.from(knownGuestIdsRef.current),
@@ -565,7 +568,7 @@ export default function Helmr() {
       }
     }, 800);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, organizerEmail, mode, inviteMode, goal, suggestionAmount, suggestionUnit, customFieldLabel, responseDeadline, people, expenses, tipsEnabled]);
+  }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, organizerEmail, mode, inviteMode, goal, suggestionAmount, suggestionUnit, customFieldLabel, notificationPreference, responseDeadline, people, expenses, tipsEnabled]);
 
   // Poll for server-side guest changes (viewedAt, RSVP status, broadcast signups, view counter)
   useEffect(() => {
@@ -669,6 +672,7 @@ export default function Helmr() {
     setSuggestionAmount(0);
     setSuggestionUnit('per person');
     setCustomFieldLabel('');
+    setNotificationPreference('live');
     setResponseDeadline('');
     setViewCount(0);
     setTipsEnabled(false);
@@ -728,6 +732,7 @@ export default function Helmr() {
           mode, inviteMode, goal: Number(goal) || 0,
           suggestionAmount: Number(suggestionAmount) || 0, suggestionUnit,
           customFieldLabel,
+          notificationPreference,
           responseDeadline: datetimeLocalToIso(responseDeadline),
           people, expenses, tipsEnabled,
         }),
@@ -1508,6 +1513,49 @@ export default function Helmr() {
               <div style={{ fontWeight: 500, marginBottom: '4px' }}>💸 Your Interac email</div>
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Where guests send their share</p>
               <input style={S.input} type="email" placeholder="you@example.com" value={organizerEmail} onChange={e => setOrganizerEmail(e.target.value)} />
+            </div>
+            <div style={S.card}>
+              <div style={{ fontWeight: 500, marginBottom: '4px' }}>🔔 Email notifications</div>
+              <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px' }}>
+                Choose when Helmr emails you about guest activity.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setNotificationPreference('live')}
+                  style={{
+                    padding: '10px 8px',
+                    borderRadius: '10px',
+                    border: notificationPreference === 'live' ? '2px solid #1a1a1a' : '0.5px solid #ddd',
+                    background: notificationPreference === 'live' ? '#1a1a1a' : 'white',
+                    color: notificationPreference === 'live' ? 'white' : '#1a1a1a',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontWeight: 500,
+                  }}
+                >
+                  Live updates
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNotificationPreference('digest')}
+                  style={{
+                    padding: '10px 8px',
+                    borderRadius: '10px',
+                    border: notificationPreference === 'digest' ? '2px solid #1a1a1a' : '0.5px solid #ddd',
+                    background: notificationPreference === 'digest' ? '#1a1a1a' : 'white',
+                    color: notificationPreference === 'digest' ? 'white' : '#1a1a1a',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontWeight: 500,
+                  }}
+                >
+                  Daily digest
+                </button>
+              </div>
+              <p style={{ fontSize: '11px', color: '#999', margin: '8px 0 0' }}>
+                Live updates send individual emails. Daily digest groups activity into a summary.
+              </p>
             </div>
             <div style={S.card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { put, get, del } from '@vercel/blob';
 import { getEvent, updateEvent } from '@/lib/events';
+import { sendOrganizerLiveNotification } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -79,7 +80,13 @@ export async function POST(request, { params }) {
       };
     });
 
-    await updateEvent(params.eventId, { people });
+    const updated = await updateEvent(params.eventId, { people });
+    const guest = updated.people.find(p => p.id === guestId);
+    await sendOrganizerLiveNotification({
+      event: updated,
+      whatHappened: 'Payment screenshot uploaded',
+      actorName: guest?.name || existing.name || 'Guest',
+    });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
