@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Auth from '../../components/Auth';
+import UpgradeModal from '../../components/UpgradeModal';
 import { getSupabaseClient } from '../../lib/supabase';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
 
@@ -354,6 +355,7 @@ export default function Helmr() {
   const [tipsEnabled, setTipsEnabled] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -668,7 +670,7 @@ export default function Helmr() {
       return;
     }
     if (savedEvents.length >= 1) {
-      alert('Upgrade to Pro to create unlimited events');
+      setUpgradeOpen(true);
       return;
     }
     setEventId(null);
@@ -694,6 +696,12 @@ export default function Helmr() {
     setPeople([{ id: 'organizer', name: organizerName || 'You', status: 'paid', role: 'organizer' }]);
     setTab('overview');
     setScreen('chooseType');
+  };
+
+  const handleSignOut = async () => {
+    const supabase = getSupabaseClient();
+    await supabase.auth.signOut();
+    window.location.href = '/';
   };
 
   const cycleStatus = (id) => {
@@ -732,7 +740,7 @@ export default function Helmr() {
       const ownedEvents = await fetchUserEventSummaries();
       setSavedEvents(ownedEvents);
       if (ownedEvents.length >= 1) {
-        alert('Upgrade to Pro to create unlimited events');
+        setUpgradeOpen(true);
         return;
       }
 
@@ -754,7 +762,7 @@ export default function Helmr() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         if (data.error === 'Upgrade to Pro to create unlimited events') {
-          alert('Upgrade to Pro to create unlimited events');
+          setUpgradeOpen(true);
           return;
         }
         throw new Error('Failed');
@@ -996,7 +1004,10 @@ export default function Helmr() {
             </div>
             <h2 style={{ fontSize: '20px', margin: '2px 0 0', fontWeight: 500 }}>{eventName || 'Your event'}</h2>
           </div>
-          <button style={S.btnGhost} onClick={() => setScreen('welcome')}>← Home</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+            <button style={S.btnGhost} onClick={handleSignOut}>Sign out</button>
+            <button style={S.btnGhost} onClick={() => setScreen('welcome')}>← Home</button>
+          </div>
         </div>
         <div style={{ display: 'flex', borderBottom: '0.5px solid #eee', marginBottom: '14px' }}>
           {['overview', 'people', 'expenses', 'extras'].map(t => (
@@ -1635,6 +1646,11 @@ export default function Helmr() {
         open={shareOpen}
         onClose={() => setShareOpen(false)}
         event={eventId ? { id: eventId, people, inviteMode, eventName, mode } : null}
+      />
+      <UpgradeModal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        onUpgrade={() => setUpgradeOpen(false)}
       />
     </div>
   );
