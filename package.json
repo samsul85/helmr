@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "setup-stripe": "node scripts/setup-stripe-products.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
@@ -17,6 +18,7 @@
     "posthog-js": "^1.205.0",
     "react": "^18",
     "react-dom": "^18",
-    "resend": "^6.12.4"
+    "resend": "^6.12.4",
+    "stripe": "^22.2.0"
   }
 }

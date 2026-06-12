@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 const S = {
   modalOverlay: {
     position: 'fixed',
@@ -40,10 +42,57 @@ const S = {
     fontWeight: 500,
     fontFamily: 'inherit',
   },
+  planOption: {
+    width: '100%',
+    padding: '14px 16px',
+    borderRadius: '12px',
+    border: '0.5px solid #ddd',
+    background: 'white',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+    marginBottom: '10px',
+  },
+  planOptionSelected: {
+    border: '2px solid #0F6E56',
+    background: '#f0faf7',
+  },
 };
 
-export default function UpgradeModal({ open, onClose, onUpgrade }) {
+export default function UpgradeModal({ open, onClose, email }) {
+  const [interval, setInterval] = useState('monthly');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
   if (!open) return null;
+
+  const startCheckout = async () => {
+    if (!email) {
+      setError('Sign in with your email before upgrading.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, interval }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || 'Could not start checkout');
+      }
+
+      window.location.href = data.url;
+    } catch (err) {
+      setError(err.message || 'Could not start checkout. Please try again.');
+      setLoading(false);
+    }
+  };
 
   return (
     <div style={S.modalOverlay} onClick={onClose}>
@@ -86,14 +135,55 @@ export default function UpgradeModal({ open, onClose, onUpgrade }) {
           </div>
         </div>
 
+        <div style={{ marginBottom: '16px' }}>
+          <button
+            type="button"
+            style={{
+              ...S.planOption,
+              ...(interval === 'monthly' ? S.planOptionSelected : {}),
+            }}
+            onClick={() => setInterval('monthly')}
+            disabled={loading}
+          >
+            <div style={{ fontSize: '14px', fontWeight: 500, color: interval === 'monthly' ? '#0F6E56' : '#1a1a1a' }}>
+              Monthly
+            </div>
+            <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>$7/month</div>
+          </button>
+          <button
+            type="button"
+            style={{
+              ...S.planOption,
+              ...(interval === 'yearly' ? S.planOptionSelected : {}),
+              marginBottom: 0,
+            }}
+            onClick={() => setInterval('yearly')}
+            disabled={loading}
+          >
+            <div style={{ fontSize: '14px', fontWeight: 500, color: interval === 'yearly' ? '#0F6E56' : '#1a1a1a' }}>
+              Yearly
+            </div>
+            <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
+              $60/year <span style={{ color: '#0F6E56' }}>· save 29%</span>
+            </div>
+          </button>
+        </div>
+
+        {error && (
+          <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#791f1f', textAlign: 'center' }}>
+            {error}
+          </p>
+        )}
+
         <button
           type="button"
-          style={{ ...S.btnTeal, marginBottom: '8px' }}
-          onClick={onUpgrade}
+          style={{ ...S.btnTeal, marginBottom: '8px', opacity: loading ? 0.7 : 1 }}
+          onClick={startCheckout}
+          disabled={loading}
         >
-          Upgrade now
+          {loading ? 'Redirecting…' : 'Upgrade now'}
         </button>
-        <button type="button" style={S.btnGhost} onClick={onClose}>
+        <button type="button" style={S.btnGhost} onClick={onClose} disabled={loading}>
           Maybe later
         </button>
       </div>

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createEvent, listEventsByOwner } from '@/lib/events';
+import { isProUser } from '@/lib/pro';
 import { applySupabaseCookies, getSupabaseUserFromRequest } from '@/lib/supabase-server';
 
 export const runtime = 'nodejs';
@@ -28,7 +29,7 @@ export async function POST(request) {
     }
 
     const existingEvents = await listEventsByOwner(ownerId);
-    if (existingEvents.length >= 1) {
+    if (!isProUser(user) && existingEvents.length >= 1) {
       const response = NextResponse.json(
         { error: 'Upgrade to Pro to create unlimited events' },
         { status: 403 }

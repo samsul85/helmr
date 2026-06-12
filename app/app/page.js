@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Auth from '../../components/Auth';
 import UpgradeModal from '../../components/UpgradeModal';
 import { getSupabaseClient } from '../../lib/supabase';
+import { isProUser } from '../../lib/pro';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
 
 // ============ CONFIG ============
@@ -475,6 +476,18 @@ export default function Helmr() {
     return () => { cancelled = true; };
   }, [session?.user?.id]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('upgraded')) return;
+
+    const supabase = getSupabaseClient();
+    supabase.auth.refreshSession().then(({ data }) => {
+      if (data.session) setSession(data.session);
+      window.history.replaceState(null, '', window.location.pathname);
+    });
+  }, []);
+
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   // Cost Split: organizer only counts as "confirmed" (and gets a share of the bill)
   // if they've explicitly opted themselves in via the "Include myself" toggle.
@@ -700,7 +713,7 @@ export default function Helmr() {
       alert('Still loading your events — please try again in a moment.');
       return;
     }
-    if (savedEvents.length >= 1) {
+    if (!isProUser(session?.user) && savedEvents.length >= 1) {
       setUpgradeOpen(true);
       return;
     }
@@ -770,7 +783,7 @@ export default function Helmr() {
 
       const ownedEvents = await fetchUserEventSummaries();
       setSavedEvents(ownedEvents);
-      if (ownedEvents.length >= 1) {
+      if (!isProUser(user) && ownedEvents.length >= 1) {
         setUpgradeOpen(true);
         return;
       }
@@ -1682,7 +1695,7 @@ export default function Helmr() {
       <UpgradeModal
         open={upgradeOpen}
         onClose={() => setUpgradeOpen(false)}
-        onUpgrade={() => setUpgradeOpen(false)}
+        email={session?.user?.email || ''}
       />
     </div>
   );
