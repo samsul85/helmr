@@ -154,6 +154,92 @@ const S = {
     lineHeight: 1.5,
     margin: 0,
   },
+  pricing: {
+    padding: '60px 24px',
+    borderTop: '0.5px solid #e5e0d4',
+  },
+  pricingInner: {
+    maxWidth: '720px',
+    margin: '0 auto',
+  },
+  pricingHeading: {
+    fontSize: 'clamp(24px, 3vw, 32px)',
+    fontWeight: 500,
+    letterSpacing: '-0.02em',
+    textAlign: 'center',
+    margin: '0 0 32px',
+    color: '#1a1a1a',
+  },
+  pricingGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+    gap: '20px',
+  },
+  pricingCard: {
+    background: 'white',
+    borderRadius: '16px',
+    padding: '28px 24px',
+    display: 'flex',
+    flexDirection: 'column',
+    boxSizing: 'border-box',
+  },
+  pricingCardFree: {
+    border: '0.5px solid #ccc',
+  },
+  pricingCardPro: {
+    border: '2px solid #0F6E56',
+  },
+  pricingPlan: {
+    fontSize: '16px',
+    fontWeight: 500,
+    margin: '0 0 8px',
+    color: '#1a1a1a',
+  },
+  pricingPlanPro: {
+    color: '#0F6E56',
+  },
+  pricingPrice: {
+    fontSize: '32px',
+    fontWeight: 500,
+    margin: '0 0 4px',
+    letterSpacing: '-0.02em',
+  },
+  pricingPriceNote: {
+    fontSize: '13px',
+    color: '#666',
+    margin: '0 0 20px',
+    minHeight: '20px',
+  },
+  pricingFeature: {
+    fontSize: '14px',
+    color: '#666',
+    lineHeight: 1.6,
+    margin: '0 0 6px',
+  },
+  pricingBtn: {
+    marginTop: 'auto',
+    width: '100%',
+    padding: '14px 24px',
+    borderRadius: '10px',
+    fontSize: '15px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    textDecoration: 'none',
+    textAlign: 'center',
+    display: 'inline-block',
+    boxSizing: 'border-box',
+  },
+  pricingBtnFree: {
+    background: 'transparent',
+    color: '#1a1a1a',
+    border: '0.5px solid #1a1a1a',
+  },
+  pricingBtnPro: {
+    background: '#0F6E56',
+    color: 'white',
+    border: 'none',
+  },
   footer: {
     padding: '32px 24px',
     textAlign: 'center',
@@ -249,6 +335,36 @@ export default function LandingPage() {
             <p style={S.featureDesc}>
               Run an open pool where people chip in what they want, or split a known cost across a known group.
             </p>
+          </div>
+        </div>
+      </section>
+
+      <section style={S.pricing}>
+        <div style={S.pricingInner}>
+          <h2 style={S.pricingHeading}>Simple pricing</h2>
+          <div style={S.pricingGrid}>
+            <div style={{ ...S.pricingCard, ...S.pricingCardFree }}>
+              <h3 style={S.pricingPlan}>Free</h3>
+              <div style={S.pricingPrice}>$0</div>
+              <div style={S.pricingPriceNote} />
+              <p style={S.pricingFeature}>1 active event</p>
+              <p style={S.pricingFeature}>All features</p>
+              <p style={S.pricingFeature}>No credit card needed</p>
+              <a href="/app" style={{ ...S.pricingBtn, ...S.pricingBtnFree }} onClick={onTryClick}>
+                Start free
+              </a>
+            </div>
+            <div style={{ ...S.pricingCard, ...S.pricingCardPro }}>
+              <h3 style={{ ...S.pricingPlan, ...S.pricingPlanPro }}>Pro</h3>
+              <div style={{ ...S.pricingPrice, color: '#0F6E56' }}>$7</div>
+              <p style={S.pricingPriceNote}>per month or $60/year</p>
+              <p style={S.pricingFeature}>Unlimited events</p>
+              <p style={S.pricingFeature}>All features</p>
+              <p style={S.pricingFeature}>Cancel anytime</p>
+              <a href="/app" style={{ ...S.pricingBtn, ...S.pricingBtnPro }} onClick={onTryClick}>
+                Get Pro
+              </a>
+            </div>
           </div>
         </div>
       </section>
