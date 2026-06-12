@@ -69,6 +69,22 @@ function removeEventFromLocal(id) {
   } catch {}
 }
 
+function getAuthParamsInUrl() {
+  if (typeof window === 'undefined') return { hasAuthToken: false, code: null };
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const queryParams = new URLSearchParams(window.location.search);
+  const hasAuthToken =
+    hashParams.has('access_token') ||
+    hashParams.has('refresh_token') ||
+    queryParams.has('code');
+  return { hasAuthToken, code: queryParams.get('code') };
+}
+
+function cleanAuthParamsFromUrl() {
+  if (typeof window === 'undefined') return;
+  window.history.replaceState(null, '', window.location.pathname);
+}
+
 function normalizeSavedEvent(event) {
   if (!event || !event.id) return null;
   return {
@@ -390,30 +406,45 @@ export default function Helmr() {
   useEffect(() => {
     let mounted = true;
     const supabase = getSupabaseClient();
+    const { hasAuthToken, code } = getAuthParamsInUrl();
 
-    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    const queryParams = new URLSearchParams(window.location.search);
-    const hasAuthToken =
-      hashParams.has('access_token') ||
-      hashParams.has('refresh_token') ||
-      queryParams.has('code');
+    const applySession = (nextSession) => {
+      if (!mounted) return;
+      setSession(nextSession);
+      setAuthLoading(false);
+      if (nextSession && hasAuthToken) cleanAuthParamsFromUrl();
+    };
 
     const loadSession = async () => {
-      if (hasAuthToken) {
-        await new Promise(resolve => setTimeout(resolve, 600));
-      }
+      try {
+        if (hasAuthToken) {
+          // iOS Safari opens magic links in a new tab; give Supabase time to parse URL tokens.
+          await new Promise(resolve => setTimeout(resolve, 500));
+          if (code) {
+            const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+            if (!error && data.session) {
+              applySession(data.session);
+              return;
+            }
+          }
+        }
 
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) return;
-      setSession(data.session);
-      setAuthLoading(false);
+        const { data } = await supabase.auth.getSession();
+        applySession(data.session);
+      } catch {
+        if (mounted) setAuthLoading(false);
+      }
     };
 
     loadSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!mounted) return;
+      // Don't flash the sign-in screen while magic-link tokens are still being processed.
+      if (hasAuthToken && !nextSession) return;
       setSession(nextSession);
       setAuthLoading(false);
+      if (nextSession && hasAuthToken) cleanAuthParamsFromUrl();
     });
 
     return () => {
@@ -1624,10 +1655,11 @@ export default function Helmr() {
   };
 
   if (authLoading) {
+    const { hasAuthToken } = getAuthParamsInUrl();
     return (
       <div style={S.page}>
         <div style={{ ...S.frame, minHeight: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '14px' }}>
-          Loading...
+          {hasAuthToken ? 'Signing you in...' : 'Loading...'}
         </div>
       </div>
     );
