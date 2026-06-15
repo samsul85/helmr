@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { getSupabaseClient } from '@/lib/supabase';
 
 const S = {
   modalOverlay: {
@@ -60,39 +61,73 @@ const S = {
 };
 
 export default function UpgradeModal({ open, onClose, email }) {
-  const [interval, setInterval] = useState('monthly');
+  const [planInterval, setPlanInterval] = useState('monthly');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  if (!open) return null;
-
-  const startCheckout = async () => {
-    if (!email) {
-      setError('Sign in with your email before upgrading.');
-      return;
+  useEffect(() => {
+    if (open) {
+      setError('');
+      setLoading(false);
     }
+  }, [open]);
+
+  const startCheckout = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
 
     setLoading(true);
     setError('');
 
     try {
-      const res = await fetch('/api/stripe/checkout', {
+      let checkoutEmail = typeof email === 'string' ? email.trim() : '';
+
+      if (!checkoutEmail) {
+        const supabase = getSupabaseClient();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) {
+          console.error('[UpgradeModal] getUser failed:', userError.message);
+        }
+        checkoutEmail = user?.email?.trim() || '';
+      }
+
+      if (!checkoutEmail) {
+        setError('Sign in with your email before upgrading.');
+        setLoading(false);
+        return;
+      }
+
+      console.error('[UpgradeModal] starting checkout', {
+        planInterval,
+        email: checkoutEmail,
+      });
+
+      const res = await fetch(`${window.location.origin}/api/stripe/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, interval }),
+        credentials: 'include',
+        body: JSON.stringify({
+          email: checkoutEmail,
+          interval: planInterval,
+        }),
       });
+
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.url) {
+        console.error('[UpgradeModal] checkout failed', { status: res.status, data });
         throw new Error(data.error || 'Could not start checkout');
       }
 
       window.location.href = data.url;
     } catch (err) {
+      console.error('[UpgradeModal] checkout error:', err);
       setError(err.message || 'Could not start checkout. Please try again.');
       setLoading(false);
     }
   };
+
+  if (!open) return null;
 
   return (
     <div style={S.modalOverlay} onClick={onClose}>
@@ -140,12 +175,12 @@ export default function UpgradeModal({ open, onClose, email }) {
             type="button"
             style={{
               ...S.planOption,
-              ...(interval === 'monthly' ? S.planOptionSelected : {}),
+              ...(planInterval === 'monthly' ? S.planOptionSelected : {}),
             }}
-            onClick={() => setInterval('monthly')}
+            onClick={() => setPlanInterval('monthly')}
             disabled={loading}
           >
-            <div style={{ fontSize: '14px', fontWeight: 500, color: interval === 'monthly' ? '#0F6E56' : '#1a1a1a' }}>
+            <div style={{ fontSize: '14px', fontWeight: 500, color: planInterval === 'monthly' ? '#0F6E56' : '#1a1a1a' }}>
               Monthly
             </div>
             <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>$7/month</div>
@@ -154,13 +189,13 @@ export default function UpgradeModal({ open, onClose, email }) {
             type="button"
             style={{
               ...S.planOption,
-              ...(interval === 'yearly' ? S.planOptionSelected : {}),
+              ...(planInterval === 'yearly' ? S.planOptionSelected : {}),
               marginBottom: 0,
             }}
-            onClick={() => setInterval('yearly')}
+            onClick={() => setPlanInterval('yearly')}
             disabled={loading}
           >
-            <div style={{ fontSize: '14px', fontWeight: 500, color: interval === 'yearly' ? '#0F6E56' : '#1a1a1a' }}>
+            <div style={{ fontSize: '13px', fontWeight: 500, color: planInterval === 'yearly' ? '#0F6E56' : '#1a1a1a' }}>
               Yearly
             </div>
             <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
