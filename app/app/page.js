@@ -96,7 +96,9 @@ function normalizeSavedEvent(event) {
 }
 
 async function fetchUserEventSummaries() {
-  const res = await fetch('/api/user/events');
+  const res = await fetch(`${window.location.origin}/api/user/events`, {
+    credentials: 'include',
+  });
   if (!res.ok) throw new Error('Failed to load user events');
   const data = await res.json();
   return Array.isArray(data.events)
@@ -708,15 +710,40 @@ export default function Helmr() {
 
   // Reset all event state so "Plan something new" starts from a clean slate.
   // Without this, fields from the previously-open event leak into the new one.
-  const startNewEvent = () => {
+  const checkEventLimit = async () => {
+    const supabase = getSupabaseClient();
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) return { blocked: false, user: null };
+
+    if (isProUser(user)) {
+      return { blocked: false, user };
+    }
+
+    const events = await fetchUserEventSummaries();
+    setSavedEvents(events);
+    return { blocked: events.length >= 1, user };
+  };
+
+  const startNewEvent = async () => {
     if (userEventsLoading) {
       alert('Still loading your events — please try again in a moment.');
       return;
     }
-    if (!isProUser(session?.user) && savedEvents.length >= 1) {
-      setUpgradeOpen(true);
-      return;
+
+    try {
+      const { blocked } = await checkEventLimit();
+      if (blocked) {
+        setUpgradeOpen(true);
+        return;
+      }
+    } catch (err) {
+      console.error('Event limit check failed:', err);
+      if (!isProUser(session?.user) && savedEvents.length >= 1) {
+        setUpgradeOpen(true);
+        return;
+      }
     }
+
     setEventId(null);
     setEventType(null);
     setEventName('');
@@ -773,24 +800,21 @@ export default function Helmr() {
     }
     try {
       setSaving(true);
-      const supabase = getSupabaseClient();
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
+      const { blocked, user } = await checkEventLimit();
+      if (!user) {
         setSession(null);
         alert('Please sign in again.');
         return;
       }
-
-      const ownedEvents = await fetchUserEventSummaries();
-      setSavedEvents(ownedEvents);
-      if (!isProUser(user) && ownedEvents.length >= 1) {
+      if (blocked) {
         setUpgradeOpen(true);
         return;
       }
 
-      const res = await fetch('/api/events', {
+      const res = await fetch(`${window.location.origin}/api/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           ownerId: user.id,
           eventType, eventName, eventDate, eventLoc, dateTBD, locTBD,
