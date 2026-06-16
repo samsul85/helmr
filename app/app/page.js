@@ -82,6 +82,20 @@ function cleanAuthParamsFromUrl() {
   window.history.replaceState(null, '', window.location.pathname);
 }
 
+// Temporary design-testing bypass — remove before production launch.
+function isPreviewMode() {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('preview') === '1';
+}
+
+const PREVIEW_SESSION = {
+  user: {
+    id: 'preview-user',
+    email: 'preview@helmr.ca',
+    user_metadata: { plan: 'free' },
+  },
+};
+
 function normalizeSavedEvent(event) {
   if (!event || !event.id) return null;
   return {
@@ -147,7 +161,6 @@ function FeedbackModal({ open, onClose, currentScreen, onAlert }) {
       setSubmitted(true);
     } catch {
       if (onAlert) await onAlert('Could not send feedback — please try again.');
-      else alert('Could not send feedback — please try again.');
     }
     setSubmitting(false);
   };
@@ -392,6 +405,12 @@ export default function Helmr() {
   const [savedEvents, setSavedEvents] = useState([]);
   const [userEventsLoading, setUserEventsLoading] = useState(false);
   useEffect(() => {
+    if (isPreviewMode()) {
+      setSession(PREVIEW_SESSION);
+      setAuthLoading(false);
+      return;
+    }
+
     let mounted = true;
     const supabase = getSupabaseClient();
     const { hasAuthToken, code } = getAuthParamsInUrl();
@@ -1805,7 +1824,9 @@ export default function Helmr() {
     }
   };
 
-  if (authLoading) {
+  const previewMode = isPreviewMode();
+
+  if (authLoading && !previewMode) {
     const { hasAuthToken } = getAuthParamsInUrl();
     return (
       <div style={DS.page}>
@@ -1816,7 +1837,7 @@ export default function Helmr() {
     );
   }
 
-  if (!session) {
+  if (!session && !previewMode) {
     return <Auth />;
   }
 
