@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Auth from '../../components/Auth';
 import UpgradeModal from '../../components/UpgradeModal';
+import AppDialog, { createDialogHelpers } from '../../components/AppDialog';
+import BottomNav from '../../components/BottomNav';
 import { getSupabaseClient } from '../../lib/supabase';
 import { isProUser } from '../../lib/pro';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
+import { BRAND, DS, getEventColor, STATUS_STYLES, FONT } from '../../lib/design';
 
 // ============ CONFIG ============
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mredzlyn';
@@ -31,13 +34,6 @@ const eventTypes = [
   { id: 'beach', icon: '🏖️', label: 'Beach day', expenses: ['Rental', 'Food', 'Drinks', 'Equipment'], defaultMode: 'cost_split' },
   { id: 'other', icon: '➕', label: 'Other', expenses: [], defaultMode: 'cost_split' },
 ];
-
-const statusStyles = {
-  invited:   { bg: '#eeeae0', fg: '#666' },
-  confirmed: { bg: '#e1f5ee', fg: '#085041' },
-  paid:      { bg: '#eaf3de', fg: '#27500a' },
-  declined:  { bg: '#fcebeb', fg: '#791f1f' },
-};
 
 function newGuestId() {
   return 'g' + Math.random().toString(36).slice(2, 9);
@@ -91,6 +87,11 @@ function normalizeSavedEvent(event) {
   return {
     id: event.id,
     name: event.name || event.eventName || 'Untitled event',
+    eventType: event.eventType || 'other',
+    mode: event.mode === 'open_pool' ? 'open_pool' : 'cost_split',
+    responseDeadline: event.responseDeadline || '',
+    total: Number(event.total) || 0,
+    pooled: Number(event.pooled) || 0,
     updatedAt: Number(event.updatedAt || event.createdAt) || Date.now(),
   };
 }
@@ -105,25 +106,6 @@ async function fetchUserEventSummaries() {
     ? data.events.map(normalizeSavedEvent).filter(Boolean)
     : [];
 }
-
-const S = {
-  page: { minHeight: '100vh', background: '#f5f3ee', padding: '12px', boxSizing: 'border-box' },
-  frame: { maxWidth: '420px', margin: '0 auto', background: 'white', borderRadius: '20px', minHeight: '85vh', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' },
-  topBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderBottom: '0.5px solid #eee' },
-  btn: { width: '100%', padding: '14px', borderRadius: '10px', border: '0.5px solid #ccc', background: 'white', cursor: 'pointer', fontSize: '15px', fontWeight: 500, fontFamily: 'inherit' },
-  btnPrimary: { background: '#1a1a1a', color: 'white', border: 'none' },
-  btnGhost: { background: 'transparent', border: 'none', color: '#666', fontSize: '13px', padding: '8px', cursor: 'pointer', fontFamily: 'inherit' },
-  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '0.5px solid #ddd', fontSize: '15px', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' },
-  card: { background: 'white', border: '0.5px solid #eee', borderRadius: '12px', padding: '14px', marginBottom: '10px' },
-  label: { fontSize: '12px', color: '#777', marginBottom: '4px', display: 'block' },
-  pill: { fontSize: '11px', padding: '3px 10px', borderRadius: '999px', fontWeight: 500, cursor: 'pointer', userSelect: 'none' },
-  tab: { flex: 1, padding: '10px 4px', textAlign: 'center', fontSize: '12px', cursor: 'pointer', borderBottom: '2px solid transparent', color: '#777', fontWeight: 500 },
-  tabActive: { borderBottomColor: '#1a1a1a', color: '#1a1a1a' },
-  evt: { padding: '16px 8px', borderRadius: '12px', border: '0.5px solid #e8e4d8', background: 'white', cursor: 'pointer', textAlign: 'center', fontSize: '13px' },
-  feedbackBtn: { position: 'fixed', bottom: '20px', right: '20px', background: '#1a1a1a', color: 'white', border: 'none', borderRadius: '999px', padding: '12px 18px', fontSize: '14px', fontWeight: 500, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', zIndex: 100, fontFamily: 'inherit' },
-  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', zIndex: 200 },
-  modal: { background: 'white', borderRadius: '16px', padding: '20px', maxWidth: '420px', width: '100%' },
-};
 
 // Convert a <input type="datetime-local"> value (no timezone, e.g. "2026-05-23T22:20")
 // into an ISO string anchored to the user's local timezone, ready to store on the server.
@@ -145,7 +127,7 @@ function isoToDatetimeLocal(s) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function FeedbackModal({ open, onClose, currentScreen }) {
+function FeedbackModal({ open, onClose, currentScreen, onAlert }) {
   const [verdict, setVerdict] = useState('');
   const [comment, setComment] = useState('');
   const [name, setName] = useState('');
@@ -164,55 +146,56 @@ function FeedbackModal({ open, onClose, currentScreen }) {
       });
       setSubmitted(true);
     } catch {
-      alert('Could not send feedback — please try again.');
+      if (onAlert) await onAlert('Could not send feedback — please try again.');
+      else alert('Could not send feedback — please try again.');
     }
     setSubmitting(false);
   };
 
   if (submitted) {
     return (
-      <div style={S.modalOverlay} onClick={onClose}>
-        <div style={S.modal} onClick={e => e.stopPropagation()}>
+      <div style={DS.modalOverlay} onClick={onClose}>
+        <div style={DS.modal} onClick={e => e.stopPropagation()}>
           <h3 style={{ margin: '0 0 8px' }}>Thanks 🙏</h3>
           <p style={{ margin: '0 0 16px', color: '#666', fontSize: '14px' }}>This helps a lot.</p>
-          <button style={{ ...S.btn, ...S.btnPrimary }} onClick={() => { setSubmitted(false); onClose(); }}>Close</button>
+          <button style={{ ...DS.btn, ...DS.btnPrimary }} onClick={() => { setSubmitted(false); onClose(); }}>Close</button>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={S.modalOverlay} onClick={onClose}>
-      <div style={S.modal} onClick={e => e.stopPropagation()}>
+    <div style={DS.modalOverlay} onClick={onClose}>
+      <div style={DS.modal} onClick={e => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 4px' }}>Quick feedback</h3>
         <p style={{ margin: '0 0 16px', color: '#666', fontSize: '13px' }}>Takes 30 seconds. Helps me figure out if this is worth building.</p>
 
-        <label style={S.label}>Would you use Helmr for your next group event?</label>
+        <label style={DS.label}>Would you use Helmr for your next group event?</label>
         <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
           {['Yes', 'Maybe', 'No'].map(v => (
             <button
               key={v}
               onClick={() => setVerdict(v)}
-              style={{ flex: 1, padding: '10px', borderRadius: '10px', border: verdict === v ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: verdict === v ? '#1a1a1a' : 'white', color: verdict === v ? 'white' : '#1a1a1a', fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
+              style={{ flex: 1, padding: '10px', borderRadius: '10px', border: verdict === v ? `2px solid ${BRAND}` : '0.5px solid #ddd', background: verdict === v ? BRAND : 'white', color: verdict === v ? 'white' : '#1a1a1a', fontWeight: 500, cursor: 'pointer', fontFamily: FONT }}
             >{v}</button>
           ))}
         </div>
 
-        <label style={S.label}>What's missing, confusing, or great?</label>
+        <label style={DS.label}>What's missing, confusing, or great?</label>
         <textarea
           value={comment}
           onChange={e => setComment(e.target.value)}
-          style={{ ...S.input, minHeight: '80px', resize: 'vertical', marginBottom: '14px' }}
+          style={{ ...DS.input, minHeight: '80px', resize: 'vertical', marginBottom: '14px' }}
           placeholder="Anything goes…"
         />
 
-        <label style={S.label}>Name (optional)</label>
-        <input style={{ ...S.input, marginBottom: '16px' }} value={name} onChange={e => setName(e.target.value)} placeholder="So I know who said this" />
+        <label style={DS.label}>Name (optional)</label>
+        <input style={{ ...DS.input, marginBottom: '16px' }} value={name} onChange={e => setName(e.target.value)} placeholder="So I know who said this" />
 
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button style={S.btn} onClick={onClose}>Cancel</button>
+          <button style={DS.btn} onClick={onClose}>Cancel</button>
           <button
-            style={{ ...S.btn, ...S.btnPrimary, opacity: (verdict || comment) ? 1 : 0.5 }}
+            style={{ ...DS.btn, ...DS.btnPrimary, opacity: (verdict || comment) ? 1 : 0.5 }}
             disabled={!verdict && !comment || submitting}
             onClick={submit}
           >{submitting ? 'Sending…' : 'Send feedback'}</button>
@@ -257,8 +240,8 @@ function ShareModal({ open, onClose, event }) {
     const smsUrl = `sms:?&body=${encodeURIComponent(msg)}`;
 
     return (
-      <div style={S.modalOverlay} onClick={onClose}>
-        <div style={{ ...S.modal, maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div style={DS.modalOverlay} onClick={onClose}>
+        <div style={{ ...DS.modal, maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
           <h3 style={{ margin: '0 0 4px' }}>Share the link</h3>
           <p style={{ margin: '0 0 16px', color: '#666', fontSize: '13px' }}>
             Post this in your group chat. Anyone with the link can join.
@@ -266,25 +249,25 @@ function ShareModal({ open, onClose, event }) {
 
           <div style={{ marginBottom: '14px', padding: '12px', background: '#f5f3ee', borderRadius: '10px' }}>
             <div style={{ fontFamily: 'monospace', fontSize: '13px', wordBreak: 'break-all', marginBottom: '10px' }}>{eventBase}</div>
-            <button style={{ ...S.btn, ...S.btnPrimary }} onClick={() => copy(eventBase, 'link')}>
+            <button style={{ ...DS.btn, ...DS.btnPrimary }} onClick={() => copy(eventBase, 'link')}>
               {copiedId === 'link' ? '✓ Copied' : 'Copy link'}
             </button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-            <a href={waUrl} target="_blank" rel="noopener noreferrer" style={{ ...S.btn, textDecoration: 'none', textAlign: 'center', color: '#1a1a1a', display: 'block' }}>
+            <a href={waUrl} target="_blank" rel="noopener noreferrer" style={{ ...DS.btn, textDecoration: 'none', textAlign: 'center', color: '#1a1a1a', display: 'block' }}>
               💬 WhatsApp
             </a>
-            <a href={smsUrl} style={{ ...S.btn, textDecoration: 'none', textAlign: 'center', color: '#1a1a1a', display: 'block' }}>
+            <a href={smsUrl} style={{ ...DS.btn, textDecoration: 'none', textAlign: 'center', color: '#1a1a1a', display: 'block' }}>
               📱 SMS
             </a>
           </div>
-          <button style={{ ...S.btn, marginBottom: '8px' }} onClick={() => copy(msg, 'msg')}>
+          <button style={{ ...DS.btn, marginBottom: '8px' }} onClick={() => copy(msg, 'msg')}>
             {copiedId === 'msg' ? '✓ Copied' : 'Copy invite message'}
           </button>
 
           <button
-            style={{ ...S.btn, marginBottom: '8px' }}
+            style={{ ...DS.btn, marginBottom: '8px' }}
             onClick={() => window.open(`${eventBase}?preview=1`, '_blank', 'noopener')}
           >
             👁 Preview as guest
@@ -294,7 +277,7 @@ function ShareModal({ open, onClose, event }) {
             You'll see contributors show up on your dashboard as they pledge.
           </p>
 
-          <button style={S.btn} onClick={onClose}>Done</button>
+          <button style={DS.btn} onClick={onClose}>Done</button>
         </div>
       </div>
     );
@@ -304,8 +287,8 @@ function ShareModal({ open, onClose, event }) {
   // PERSONAL MODE — per-guest links
   // ============================================================
   return (
-    <div style={S.modalOverlay} onClick={onClose}>
-      <div style={{ ...S.modal, maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+    <div style={DS.modalOverlay} onClick={onClose}>
+      <div style={{ ...DS.modal, maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 4px' }}>Share invite links</h3>
         <p style={{ margin: '0 0 16px', color: '#666', fontSize: '13px' }}>Send each person their own link. You'll see when they view it and RSVP.</p>
 
@@ -313,7 +296,7 @@ function ShareModal({ open, onClose, event }) {
           <div style={{ fontSize: '11px', color: '#777', marginBottom: '4px' }}>General link (anyone)</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ flex: 1, fontFamily: 'monospace', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{eventBase}</div>
-            <button style={{ ...S.btn, width: 'auto', padding: '6px 10px', fontSize: '12px' }} onClick={() => copy(eventBase, 'general')}>
+            <button style={{ ...DS.btn, width: 'auto', padding: '6px 10px', fontSize: '12px' }} onClick={() => copy(eventBase, 'general')}>
               {copiedId === 'general' ? '✓' : 'Copy'}
             </button>
           </div>
@@ -321,24 +304,24 @@ function ShareModal({ open, onClose, event }) {
 
         {guests.length === 0 && (
           <p style={{ fontSize: '13px', color: '#999', textAlign: 'center', padding: '20px 0' }}>
-            Add people on the People tab to get personal links.
+            Add people on the Guests tab to get personal links.
           </p>
         )}
 
         {guests.map(g => {
           const link = `${eventBase}?g=${g.id}`;
           return (
-            <div key={g.id} style={{ ...S.card, marginBottom: '8px' }}>
+            <div key={g.id} style={{ ...DS.card, marginBottom: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ fontSize: '14px', fontWeight: 500 }}>{g.name}</div>
                 <div style={{ display: 'flex', gap: '4px' }}>
                   {g.viewedAt && <span style={{ fontSize: '10px', color: '#085041', background: '#e1f5ee', padding: '2px 8px', borderRadius: '999px' }}>viewed</span>}
-                  {g.status && g.status !== 'invited' && <span style={{ fontSize: '10px', color: statusStyles[g.status]?.fg, background: statusStyles[g.status]?.bg, padding: '2px 8px', borderRadius: '999px' }}>{g.status}</span>}
+                  {g.status && g.status !== 'invited' && <span style={{ fontSize: '10px', color: STATUS_STYLES[g.status]?.fg, background: STATUS_STYLES[g.status]?.bg, padding: '2px 8px', borderRadius: '999px' }}>{g.status}</span>}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ flex: 1, fontFamily: 'monospace', fontSize: '11px', color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link}</div>
-                <button style={{ ...S.btn, width: 'auto', padding: '6px 10px', fontSize: '12px' }} onClick={() => copy(link, g.id)}>
+                <button style={{ ...DS.btn, width: 'auto', padding: '6px 10px', fontSize: '12px' }} onClick={() => copy(link, g.id)}>
                   {copiedId === g.id ? '✓' : 'Copy'}
                 </button>
               </div>
@@ -347,13 +330,13 @@ function ShareModal({ open, onClose, event }) {
         })}
 
         <button
-          style={{ ...S.btn, marginTop: '8px' }}
+          style={{ ...DS.btn, marginTop: '8px' }}
           onClick={() => window.open(`${eventBase}?preview=1`, '_blank', 'noopener')}
         >
           👁 Preview as guest (general link)
         </button>
 
-        <button style={{ ...S.btn, marginTop: '8px' }} onClick={onClose}>Done</button>
+        <button style={{ ...DS.btn, marginTop: '8px' }} onClick={onClose}>Done</button>
       </div>
     </div>
   );
@@ -370,7 +353,9 @@ export default function Helmr() {
   const [eventLoc, setEventLoc] = useState('');
   const [dateTBD, setDateTBD] = useState(false);
   const [locTBD, setLocTBD] = useState(false);
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState('home');
+  const [dialog, setDialog] = useState(null);
+  const dlg = useMemo(() => createDialogHelpers(setDialog), []);
   const [tipsEnabled, setTipsEnabled] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -552,11 +537,11 @@ export default function Helmr() {
       const res = await fetch(`/api/events/${id}`);
       if (!res.ok) {
         if (res.status === 404) {
-          alert('That event has expired or was deleted.');
+          await dlg.alert('That event has expired or was deleted.');
           removeEventFromLocal(id);
           setSavedEvents(prev => prev.filter(e => e.id !== id));
         } else {
-          alert("Couldn't load event.");
+          await dlg.alert("Couldn't load event.");
         }
         return;
       }
@@ -587,7 +572,7 @@ export default function Helmr() {
       setTipsEnabled(!!data.tipsEnabled);
       setScreen('dashboard');
     } catch {
-      alert("Couldn't load event.");
+      await dlg.alert("Couldn't load event.");
     } finally {
       setLoading(false);
     }
@@ -726,7 +711,7 @@ export default function Helmr() {
 
   const startNewEvent = async () => {
     if (userEventsLoading) {
-      alert('Still loading your events — please try again in a moment.');
+      await dlg.alert('Still loading your events — please try again in a moment.');
       return;
     }
 
@@ -765,7 +750,7 @@ export default function Helmr() {
     setTipsEnabled(false);
     setExpenses([]);
     setPeople([{ id: 'organizer', name: organizerName || 'You', status: 'paid', role: 'organizer' }]);
-    setTab('overview');
+    setTab('home');
     setScreen('chooseType');
   };
 
@@ -788,13 +773,13 @@ export default function Helmr() {
     // and the e-transfer details. Without it, the whole "RSVP first, pay after"
     // flow breaks.
     if (mode === 'cost_split' && !responseDeadline) {
-      alert('Please set a response deadline. Guests will see their final share and how to pay only after this date.');
+      await dlg.alert('Please set a response deadline. Guests will see their final share and how to pay only after this date.');
       return;
     }
     if (mode === 'cost_split' && responseDeadline) {
       const d = new Date(responseDeadline);
       if (!isNaN(d.getTime()) && d.getTime() < Date.now()) {
-        alert('The response deadline is in the past. Please pick a future date.');
+        await dlg.alert('The response deadline is in the past. Please pick a future date.');
         return;
       }
     }
@@ -803,7 +788,7 @@ export default function Helmr() {
       const { blocked, user } = await checkEventLimit();
       if (!user) {
         setSession(null);
-        alert('Please sign in again.');
+        await dlg.alert('Please sign in again.');
         return;
       }
       if (blocked) {
@@ -842,7 +827,7 @@ export default function Helmr() {
       setSavedEvents(savedEvent ? [savedEvent] : []);
       setScreen('dashboard');
     } catch (e) {
-      alert("Couldn't save event — please try again.");
+      await dlg.alert("Couldn't save event — please try again.");
     } finally {
       setSaving(false);
     }
@@ -850,49 +835,115 @@ export default function Helmr() {
 
   const renderScreen = () => {
     if (screen === 'welcome') return (
-      <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-        <div style={{ fontSize: '52px', marginBottom: '8px' }}>⚓</div>
-        <h1 style={{ fontSize: '32px', margin: '8px 0 4px', fontWeight: 500 }}>Helmr</h1>
-        <p style={{ fontSize: '15px', color: '#666', margin: '0 0 24px' }}>Take the helm of your next group plan</p>
-
-        {userEventsLoading && (
-          <p style={{ fontSize: '13px', color: '#777', margin: '0 0 16px' }}>
-            Loading your events...
-          </p>
-        )}
-
-        {savedEvents.length > 0 && (
-          <div style={{ textAlign: 'left', marginBottom: '24px' }}>
-            <div style={{ fontSize: '11px', color: '#999', letterSpacing: '0.5px', marginBottom: '8px', textTransform: 'uppercase' }}>Your events</div>
-            {savedEvents.map(ev => (
-              <div key={ev.id} style={{ ...S.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: loading ? 'wait' : 'pointer' }} onClick={() => !loading && resumeEvent(ev.id)}>
-                <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.name}</div>
-                  <div style={{ fontSize: '11px', color: '#999', fontFamily: 'monospace' }}>{ev.id}</div>
-                </div>
-                <button style={{ ...S.btnGhost, fontSize: '11px', padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); if (confirm(`Remove "${ev.name}" from this list? (The event itself isn't deleted.)`)) { removeEventFromLocal(ev.id); setSavedEvents(prev => prev.filter(x => x.id !== ev.id)); } }}>✕</button>
-              </div>
-            ))}
+      <div>
+        <div style={DS.tealHeader}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+            <img src="/logo.svg" alt="Helmr" style={{ width: '36px', height: '36px' }} />
+            <span style={{ fontSize: '22px', fontWeight: 500 }}>Helmr</span>
           </div>
-        )}
+          <p style={{ margin: 0, fontSize: '16px', opacity: 0.9 }}>
+            Hey {organizerName || 'there'} 👋
+          </p>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', opacity: 0.75 }}>
+            Take the helm of your next group plan
+          </p>
+        </div>
 
-        <button style={{ ...S.btn, ...S.btnPrimary, marginBottom: '10px' }} onClick={startNewEvent}>Plan something new</button>
-        <p style={{ fontSize: '11px', color: '#999', marginTop: '16px' }}>Prototype — events saved for 90 days</p>
+        <div style={{ padding: '0 20px 24px' }}>
+          {userEventsLoading && (
+            <p style={{ fontSize: '13px', color: '#777', margin: '0 0 16px' }}>
+              Loading your events...
+            </p>
+          )}
+
+          {savedEvents.length > 0 && (
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ ...DS.label, marginBottom: '10px' }}>Your events</div>
+              {savedEvents.map(ev => {
+                const evColor = getEventColor(ev.eventType);
+                const typeInfo = eventTypes.find(t => t.id === ev.eventType);
+                const statAmt = ev.mode === 'open_pool' ? ev.pooled : ev.total;
+                const statLabel = ev.mode === 'open_pool' ? 'pooled' : 'total';
+                const evDeadline = ev.responseDeadline ? formatDeadline(new Date(ev.responseDeadline)) : null;
+                return (
+                  <div
+                    key={ev.id}
+                    style={{
+                      ...DS.card,
+                      display: 'flex',
+                      alignItems: 'stretch',
+                      cursor: loading ? 'wait' : 'pointer',
+                      borderLeft: `4px solid ${evColor}`,
+                      padding: 0,
+                      overflow: 'hidden',
+                    }}
+                    onClick={() => !loading && resumeEvent(ev.id)}
+                  >
+                    <div style={{ flex: 1, padding: '14px 14px 14px 12px', minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '20px' }}>{typeInfo?.icon || '📋'}</span>
+                        <div style={{ fontSize: '15px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.name}</div>
+                      </div>
+                      <div style={{ fontSize: '13px', color: evColor, fontWeight: 500 }}>
+                        ${statAmt.toLocaleString()} {statLabel}
+                      </div>
+                      {evDeadline && (
+                        <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
+                          ⏰ RSVP by {evDeadline}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      style={{ ...DS.btnGhost, alignSelf: 'center', padding: '8px 12px', fontSize: '14px' }}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (await dlg.confirm(`Remove "${ev.name}" from this list? (The event itself isn't deleted.)`)) {
+                          removeEventFromLocal(ev.id);
+                          setSavedEvents(prev => prev.filter(x => x.id !== ev.id));
+                        }
+                      }}
+                    >✕</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <button style={{ ...DS.btn, ...DS.btnPrimary }} onClick={startNewEvent}>Plan something new</button>
+          <p style={{ fontSize: '11px', color: '#999', marginTop: '16px', textAlign: 'center' }}>Prototype — events saved for 90 days</p>
+        </div>
       </div>
     );
 
     if (screen === 'chooseType') return (
       <div style={{ padding: '20px' }}>
-        <button style={S.btnGhost} onClick={() => setScreen('welcome')}>← Back</button>
+        <button style={DS.btnGhost} onClick={() => setScreen('welcome')}>← Back</button>
         <h2 style={{ fontSize: '22px', margin: '8px 0 4px', fontWeight: 500 }}>What are you planning?</h2>
         <p style={{ fontSize: '13px', color: '#777', margin: '0 0 20px' }}>We'll suggest expenses to get you started</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-          {eventTypes.map(e => (
-            <div key={e.id} style={S.evt} onClick={() => pickType(e.id)}>
-              <div style={{ fontSize: '24px', marginBottom: '4px' }}>{e.icon}</div>
-              {e.label}
-            </div>
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          {eventTypes.map(e => {
+            const color = getEventColor(e.id);
+            return (
+              <div
+                key={e.id}
+                onClick={() => pickType(e.id)}
+                style={{
+                  padding: '20px 12px',
+                  borderRadius: '16px',
+                  background: color,
+                  color: 'white',
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  fontFamily: FONT,
+                }}
+              >
+                <div style={{ fontSize: '32px', marginBottom: '6px' }}>{e.icon}</div>
+                {e.label}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -904,26 +955,29 @@ export default function Helmr() {
         setPeople(people.map(p => p.role === 'organizer' ? { ...p, name: newName || 'You' } : p));
       };
       return (
-        <div style={{ padding: '20px' }}>
-          <button style={S.btnGhost} onClick={() => setScreen('chooseType')}>← Back</button>
-          <h2 style={{ fontSize: '22px', margin: '8px 0 16px', fontWeight: 500 }}>{t.icon} {t.label} details</h2>
+        <div style={{ padding: '0 0 20px' }}>
+          <button style={{ ...DS.btnGhost, margin: '12px 20px 0' }} onClick={() => setScreen('chooseType')}>← Back</button>
+          <div style={{ ...DS.accentHeader(getEventColor(eventType)), margin: '8px 20px 16px' }}>
+            <div style={{ fontSize: '36px', marginBottom: '4px' }}>{t.icon}</div>
+            <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 500 }}>{t.label}</h2>
+          </div>
+          <div style={{ padding: '0 20px' }}>
 
-          <label style={S.label}>How is this being paid for?</label>
+          <label style={DS.label}>How is this being paid for?</label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '4px' }}>
             <button
               onClick={() => {
                 setMode('cost_split');
-                // Cost Split only supports personal links — math relies on a known guest list.
                 setInviteMode('personal');
               }}
-              style={{ padding: '10px 8px', borderRadius: '10px', border: mode === 'cost_split' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: mode === 'cost_split' ? '#1a1a1a' : 'white', color: mode === 'cost_split' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+              style={{ padding: '10px 8px', borderRadius: '12px', border: mode === 'cost_split' ? `2px solid ${BRAND}` : '0.5px solid #ddd', background: mode === 'cost_split' ? BRAND : 'white', color: mode === 'cost_split' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: FONT, textAlign: 'left' }}
             >
               <div style={{ fontSize: '13px', fontWeight: 500 }}>Split a cost</div>
               <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>Known total, split evenly</div>
             </button>
             <button
               onClick={() => setMode('open_pool')}
-              style={{ padding: '10px 8px', borderRadius: '10px', border: mode === 'open_pool' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: mode === 'open_pool' ? '#1a1a1a' : 'white', color: mode === 'open_pool' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+              style={{ padding: '10px 8px', borderRadius: '12px', border: mode === 'open_pool' ? `2px solid ${BRAND}` : '0.5px solid #ddd', background: mode === 'open_pool' ? BRAND : 'white', color: mode === 'open_pool' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: FONT, textAlign: 'left' }}
             >
               <div style={{ fontSize: '13px', fontWeight: 500 }}>Open pool</div>
               <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>Chip in what you want</div>
@@ -937,18 +991,18 @@ export default function Helmr() {
 
           {mode === 'open_pool' && (
             <>
-              <label style={S.label}>How are you inviting people?</label>
+              <label style={DS.label}>How are you inviting people?</label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '4px' }}>
                 <button
                   onClick={() => setInviteMode('personal')}
-                  style={{ padding: '10px 8px', borderRadius: '10px', border: inviteMode === 'personal' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: inviteMode === 'personal' ? '#1a1a1a' : 'white', color: inviteMode === 'personal' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+                  style={{ padding: '10px 8px', borderRadius: '12px', border: inviteMode === 'personal' ? `2px solid ${BRAND}` : '0.5px solid #ddd', background: inviteMode === 'personal' ? BRAND : 'white', color: inviteMode === 'personal' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: FONT, textAlign: 'left' }}
                 >
                   <div style={{ fontSize: '13px', fontWeight: 500 }}>Personal links</div>
                   <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>One link per guest, track who viewed</div>
                 </button>
                 <button
                   onClick={() => setInviteMode('broadcast')}
-                  style={{ padding: '10px 8px', borderRadius: '10px', border: inviteMode === 'broadcast' ? '2px solid #1a1a1a' : '0.5px solid #ddd', background: inviteMode === 'broadcast' ? '#1a1a1a' : 'white', color: inviteMode === 'broadcast' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+                  style={{ padding: '10px 8px', borderRadius: '12px', border: inviteMode === 'broadcast' ? `2px solid ${BRAND}` : '0.5px solid #ddd', background: inviteMode === 'broadcast' ? BRAND : 'white', color: inviteMode === 'broadcast' ? 'white' : '#1a1a1a', cursor: 'pointer', fontFamily: FONT, textAlign: 'left' }}
                 >
                   <div style={{ fontSize: '13px', fontWeight: 500 }}>One shared link</div>
                   <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '2px' }}>Post in a group chat, anyone can join</div>
@@ -962,27 +1016,27 @@ export default function Helmr() {
             </>
           )}
 
-          <label style={S.label}>Your name</label>
-          <input style={S.input} placeholder="e.g. Sam" value={organizerName} onChange={e => updateOrganizerName(e.target.value)} />
+          <label style={DS.label}>Your name</label>
+          <input style={DS.input} placeholder="e.g. Sam" value={organizerName} onChange={e => updateOrganizerName(e.target.value)} />
           <div style={{ height: '14px' }} />
 
-          <label style={S.label}>Your Interac e-Transfer email</label>
-          <input style={S.input} type="email" placeholder="e.g. you@example.com" value={organizerEmail} onChange={e => setOrganizerEmail(e.target.value)} />
+          <label style={DS.label}>Your Interac e-Transfer email</label>
+          <input style={DS.input} type="email" placeholder="e.g. you@example.com" value={organizerEmail} onChange={e => setOrganizerEmail(e.target.value)} />
           <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>This is where guests send their contribution</p>
           <div style={{ height: '14px' }} />
 
-          <label style={S.label}>Event name</label>
-          <input style={S.input} placeholder="e.g. Layla's 30th" value={eventName} onChange={e => setEventName(e.target.value)} />
+          <label style={DS.label}>Event name</label>
+          <input style={DS.input} placeholder="e.g. Layla's 30th" value={eventName} onChange={e => setEventName(e.target.value)} />
           <div style={{ height: '14px' }} />
 
           {mode === 'open_pool' && (
             <>
-              <label style={S.label}>Suggested contribution (optional)</label>
+              <label style={DS.label}>Suggested contribution (optional)</label>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <span style={{ fontSize: '14px', color: '#777' }}>$</span>
-                <input style={S.input} type="number" min="0" placeholder="10" value={suggestionAmount || ''} onChange={e => setSuggestionAmount(e.target.value)} />
+                <input style={DS.input} type="number" min="0" placeholder="10" value={suggestionAmount || ''} onChange={e => setSuggestionAmount(e.target.value)} />
                 <select
-                  style={{ ...S.input, width: 'auto' }}
+                  style={{ ...DS.input, width: 'auto' }}
                   value={suggestionUnit}
                   onChange={e => setSuggestionUnit(e.target.value)}
                 >
@@ -995,29 +1049,29 @@ export default function Helmr() {
               <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>Just a starting point — guests can give more, less, or nothing.</p>
               <div style={{ height: '14px' }} />
 
-              <label style={S.label}>Goal (optional)</label>
+              <label style={DS.label}>Goal (optional)</label>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <span style={{ fontSize: '14px', color: '#777' }}>$</span>
-                <input style={S.input} type="number" min="0" placeholder="Leave blank for no target" value={goal || ''} onChange={e => setGoal(e.target.value)} />
+                <input style={DS.input} type="number" min="0" placeholder="Leave blank for no target" value={goal || ''} onChange={e => setGoal(e.target.value)} />
               </div>
               <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>If you're trying to buy something specific.</p>
               <div style={{ height: '14px' }} />
             </>
           )}
 
-          <label style={S.label}><input type="checkbox" checked={dateTBD} onChange={() => setDateTBD(!dateTBD)} style={{ marginRight: '4px' }} /> Date TBD</label>
-          {!dateTBD && <input style={S.input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />}
+          <label style={DS.label}><input type="checkbox" checked={dateTBD} onChange={() => setDateTBD(!dateTBD)} style={{ marginRight: '4px' }} /> Date TBD</label>
+          {!dateTBD && <input style={DS.input} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />}
           <div style={{ height: '14px' }} />
 
-          <label style={S.label}><input type="checkbox" checked={locTBD} onChange={() => setLocTBD(!locTBD)} style={{ marginRight: '4px' }} /> Location TBD</label>
-          {!locTBD && <input style={S.input} placeholder="Where?" value={eventLoc} onChange={e => setEventLoc(e.target.value)} />}
+          <label style={DS.label}><input type="checkbox" checked={locTBD} onChange={() => setLocTBD(!locTBD)} style={{ marginRight: '4px' }} /> Location TBD</label>
+          {!locTBD && <input style={DS.input} placeholder="Where?" value={eventLoc} onChange={e => setEventLoc(e.target.value)} />}
           <div style={{ height: '14px' }} />
 
-          <label style={S.label}>
+          <label style={DS.label}>
             Response deadline {mode === 'cost_split' ? <span style={{ color: '#a55' }}>*</span> : <span style={{ color: '#999', fontWeight: 400 }}>(optional)</span>}
           </label>
           <input
-            style={S.input}
+            style={DS.input}
             type="datetime-local"
             value={responseDeadline}
             onChange={e => setResponseDeadline(e.target.value)}
@@ -1043,9 +1097,9 @@ export default function Helmr() {
           </p>
           <div style={{ height: '14px' }} />
 
-          <label style={S.label}>Ask each guest for… (optional)</label>
+          <label style={DS.label}>Ask each guest for… (optional)</label>
           <input
-            style={S.input}
+            style={DS.input}
             placeholder={mode === 'open_pool' ? "e.g. Child's name" : "e.g. Dietary restriction"}
             value={customFieldLabel}
             onChange={e => setCustomFieldLabel(e.target.value)}
@@ -1056,43 +1110,75 @@ export default function Helmr() {
           </p>
           <div style={{ height: '20px' }} />
 
-          <button style={{ ...S.btn, ...S.btnPrimary, opacity: saving ? 0.6 : 1 }} disabled={saving} onClick={goToDashboard}>
+          <button style={{ ...DS.btn, ...DS.btnPrimary, opacity: saving ? 0.6 : 1 }} disabled={saving} onClick={goToDashboard}>
             {saving ? 'Saving…' : 'Continue'}
           </button>
+          </div>
         </div>
       );
     }
 
-    if (screen === 'dashboard') return (
-      <div style={{ padding: '14px 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <div>
-            <div style={{ fontSize: '11px', color: '#999', letterSpacing: '0.5px' }}>
-              ORGANIZER VIEW {saving && <span style={{ color: '#aaa' }}>· saving…</span>}
-            </div>
-            <h2 style={{ fontSize: '20px', margin: '2px 0 0', fontWeight: 500 }}>{eventName || 'Your event'}</h2>
+    if (screen === 'dashboard') {
+      const accentColor = getEventColor(eventType);
+      const typeInfo = eventTypes.find(e => e.id === eventType);
+      const guestList = people.filter(p => p.role !== 'organizer');
+
+      return (
+      <div>
+        <div style={{ background: BRAND, color: 'white', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img src="/logo.svg" alt="" style={{ width: '28px', height: '28px' }} />
+            <span style={{ fontWeight: 500, fontSize: '18px' }}>Helmr</span>
+            {saving && <span style={{ fontSize: '11px', opacity: 0.7 }}>· saving…</span>}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-            <button style={S.btnGhost} onClick={handleSignOut}>Sign out</button>
-            <button style={S.btnGhost} onClick={() => setScreen('welcome')}>← Home</button>
-          </div>
+          <button style={{ ...DS.btnGhost, color: 'rgba(255,255,255,0.85)' }} onClick={() => setScreen('welcome')}>← Events</button>
         </div>
-        <div style={{ display: 'flex', borderBottom: '0.5px solid #eee', marginBottom: '14px' }}>
-          {['overview', 'people', 'expenses', 'extras'].map(t => (
-            <div key={t} style={{ ...S.tab, ...(tab === t ? S.tabActive : {}) }} onClick={() => setTab(t)}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
+
+        <div style={{ padding: '16px 20px' }}>
+          <div style={{ ...DS.accentHeader(accentColor), marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <span style={{ fontSize: '24px' }}>{typeInfo?.icon || '📋'}</span>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 500 }}>{eventName || 'Your event'}</h2>
             </div>
-          ))}
-        </div>
+            {mode === 'cost_split' ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '13px' }}>
+                <div>
+                  <div style={{ opacity: 0.8, fontSize: '11px' }}>Total</div>
+                  <div style={{ fontWeight: 600, fontSize: '18px' }}>${total.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ opacity: 0.8, fontSize: '11px' }}>Confirmed</div>
+                  <div style={{ fontWeight: 600, fontSize: '18px' }}>
+                    {confirmed - (organizerIncludedInSplit ? 1 : 0)}{inviteMode !== 'broadcast' ? ` / ${inviteeCount}` : ''}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ opacity: 0.8, fontSize: '11px' }}>{sharesVary ? 'Avg/person' : 'Per person'}</div>
+                  <div style={{ fontWeight: 600, fontSize: '18px' }}>${perPerson}</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+                <div>
+                  <div style={{ opacity: 0.8, fontSize: '11px' }}>Pooled</div>
+                  <div style={{ fontWeight: 600, fontSize: '18px' }}>${pooledTotal.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ opacity: 0.8, fontSize: '11px' }}>Contributors</div>
+                  <div style={{ fontWeight: 600, fontSize: '18px' }}>{contributorCount}</div>
+                </div>
+              </div>
+            )}
+          </div>
 
         {deadlineDate && !isNaN(deadlineDate.getTime()) && (
           <div style={{
             padding: '8px 12px',
-            borderRadius: '8px',
-            marginBottom: '10px',
+            borderRadius: '12px',
+            marginBottom: '12px',
             fontSize: '12px',
-            background: deadlinePassed ? '#fcebeb' : '#f5f3ee',
-            color: deadlinePassed ? '#791f1f' : '#666',
+            background: deadlinePassed ? '#fce8e4' : '#f5f3ee',
+            color: deadlinePassed ? '#E8645A' : '#666',
             border: `0.5px solid ${deadlinePassed ? '#f09595' : '#e5e0d4'}`,
           }}>
             {deadlinePassed
@@ -1102,46 +1188,61 @@ export default function Helmr() {
           </div>
         )}
 
-        {tab === 'overview' && (
+        {tab === 'home' && (
           <>
+            {guestList.length > 0 && (
+              <div style={{ ...DS.card, marginBottom: '12px' }}>
+                <div style={DS.label}>Payment progress</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                  {guestList.map(p => {
+                    const isPaid = p.status === 'paid';
+                    const isDeclined = p.status === 'declined';
+                    return (
+                      <div
+                        key={p.id}
+                        title={`${p.name} — ${p.status}`}
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: '50%',
+                          background: isPaid ? BRAND : isDeclined ? '#E8645A' : 'transparent',
+                          border: isPaid ? 'none' : isDeclined ? '2px solid #E8645A' : '2px dashed #bbb',
+                          flexShrink: 0,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '10px', fontSize: '11px', color: '#888' }}>
+                  <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: BRAND, marginRight: 4 }} />Paid</span>
+                  <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', border: '1px dashed #bbb', marginRight: 4 }} />Pending</span>
+                  <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#E8645A', marginRight: 4 }} />Declined</span>
+                </div>
+              </div>
+            )}
+
             {mode === 'cost_split' ? (
               <>
-                <div style={S.card}>
-                  <div style={S.label}>Total cost</div>
-                  <div style={{ fontSize: '26px', fontWeight: 500 }}>${total.toLocaleString()}</div>
-                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <div style={S.card}>
-                    <div style={S.label}>Confirmed</div>
-                    <div style={{ fontSize: '18px', fontWeight: 500 }}>
-                      {inviteMode === 'broadcast'
-                        ? `${confirmed - (organizerIncludedInSplit ? 1 : 0)}`
-                        : `${confirmed - (organizerIncludedInSplit ? 1 : 0)} / ${inviteeCount}`}
-                      {organizerIncludedInSplit && <span style={{ fontSize: '12px', color: '#666', fontWeight: 400 }}> + you</span>}
+                  {inviteMode === 'broadcast' && (
+                    <div style={DS.card}>
+                      <div style={DS.label}>Link views</div>
+                      <div style={{ fontSize: '18px', fontWeight: 500 }}>{viewCount}</div>
                     </div>
-                  </div>
-                  <div style={S.card}>
-                    <div style={S.label}>{sharesVary ? 'Per person (avg)' : 'Per person'}</div>
-                    <div style={{ fontSize: '18px', fontWeight: 500 }}>${perPerson}</div>
-                    {sharesVary && (
-                      <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
-                        Range ${minShare}–${maxShare}
-                      </div>
-                    )}
-                  </div>
+                  )}
+                  {sharesVary && (
+                    <div style={DS.card}>
+                      <div style={DS.label}>Share range</div>
+                      <div style={{ fontSize: '18px', fontWeight: 500 }}>${minShare}–${maxShare}</div>
+                    </div>
+                  )}
                 </div>
-                {inviteMode === 'broadcast' && (
-                  <div style={{ ...S.card, marginTop: '8px' }}>
-                    <div style={S.label}>Link views</div>
-                    <div style={{ fontSize: '18px', fontWeight: 500 }}>{viewCount}</div>
-                  </div>
-                )}
                 {tipsEnabled && (() => {
                   const tipsTotal = people.reduce((s, p) => s + (Number(p.tipAmount) || 0), 0);
                   const tippers = people.filter(p => Number(p.tipAmount) > 0).length;
                   return (
-                    <div style={{ ...S.card, marginTop: '8px' }}>
-                      <div style={S.label}>🎩 Tips for you</div>
+                    <div style={DS.card}>
+                      <div style={DS.label}>🎩 Tips for you</div>
                       <div style={{ fontSize: '18px', fontWeight: 500 }}>${tipsTotal}</div>
                       <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
                         {tippers === 0 ? 'No tips yet' : `From ${tippers} ${tippers === 1 ? 'person' : 'people'}`}
@@ -1152,59 +1253,41 @@ export default function Helmr() {
               </>
             ) : (
               <>
-                <div style={S.card}>
-                  <div style={S.label}>Pooled so far</div>
-                  <div style={{ fontSize: '26px', fontWeight: 500 }}>${pooledTotal.toLocaleString()}</div>
-                  {Number(goal) > 0 && (
-                    <>
-                      <div style={{ height: '6px', background: '#eee', borderRadius: '999px', marginTop: '10px', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${Math.min(100, (pooledTotal / Number(goal)) * 100)}%`, background: '#085041' }} />
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#777', marginTop: '6px' }}>Goal: ${Number(goal).toLocaleString()}</div>
-                    </>
-                  )}
-                </div>
+                {Number(goal) > 0 && (
+                  <div style={DS.card}>
+                    <div style={DS.label}>Goal progress</div>
+                    <div style={{ height: '6px', background: '#eee', borderRadius: '999px', marginTop: '8px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min(100, (pooledTotal / Number(goal)) * 100)}%`, background: accentColor }} />
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#777', marginTop: '6px' }}>Goal: ${Number(goal).toLocaleString()}</div>
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   {inviteMode === 'broadcast' ? (
-                    <>
-                      <div style={S.card}>
-                        <div style={S.label}>Link views</div>
-                        <div style={{ fontSize: '18px', fontWeight: 500 }}>{viewCount}</div>
-                      </div>
-                      <div style={S.card}>
-                        <div style={S.label}>Contributors</div>
-                        <div style={{ fontSize: '18px', fontWeight: 500 }}>{contributorCount}</div>
-                        {Number(suggestionAmount) > 0 && (
-                          <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
-                            Suggested ${Number(suggestionAmount)} {suggestionUnit}
-                          </div>
-                        )}
-                      </div>
-                    </>
+                    <div style={DS.card}>
+                      <div style={DS.label}>Link views</div>
+                      <div style={{ fontSize: '18px', fontWeight: 500 }}>{viewCount}</div>
+                    </div>
                   ) : (
-                    <>
-                      <div style={S.card}>
-                        <div style={S.label}>Contributed</div>
-                        <div style={{ fontSize: '18px', fontWeight: 500 }}>{contributorCount} / {inviteeCount}</div>
-                      </div>
-                      <div style={S.card}>
-                        <div style={S.label}>Suggested</div>
-                        <div style={{ fontSize: '18px', fontWeight: 500 }}>
-                          {Number(suggestionAmount) > 0 ? `$${Number(suggestionAmount)}` : '—'}
-                        </div>
-                        {Number(suggestionAmount) > 0 && (
-                          <div style={{ fontSize: '11px', color: '#999' }}>{suggestionUnit}</div>
-                        )}
-                      </div>
-                    </>
+                    <div style={DS.card}>
+                      <div style={DS.label}>Contributed</div>
+                      <div style={{ fontSize: '18px', fontWeight: 500 }}>{contributorCount} / {inviteeCount}</div>
+                    </div>
+                  )}
+                  {Number(suggestionAmount) > 0 && (
+                    <div style={DS.card}>
+                      <div style={DS.label}>Suggested</div>
+                      <div style={{ fontSize: '18px', fontWeight: 500 }}>${Number(suggestionAmount)}</div>
+                      <div style={{ fontSize: '11px', color: '#999' }}>{suggestionUnit}</div>
+                    </div>
                   )}
                 </div>
                 {tipsEnabled && (() => {
                   const tipsTotal = people.reduce((s, p) => s + (Number(p.tipAmount) || 0), 0);
                   const tippers = people.filter(p => Number(p.tipAmount) > 0).length;
                   return (
-                    <div style={{ ...S.card, marginTop: '8px' }}>
-                      <div style={S.label}>🎩 Tips for you</div>
+                    <div style={DS.card}>
+                      <div style={DS.label}>🎩 Tips for you</div>
                       <div style={{ fontSize: '18px', fontWeight: 500 }}>${tipsTotal}</div>
                       <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
                         {tippers === 0 ? 'No tips yet' : `From ${tippers} ${tippers === 1 ? 'person' : 'people'}`}
@@ -1218,38 +1301,42 @@ export default function Helmr() {
               const missingDeadline = mode === 'cost_split' && !responseDeadline;
               return (
                 <>
-                  <button
+                  <div
                     style={{
-                      ...S.btn,
-                      ...S.btnPrimary,
+                      ...DS.card,
                       marginTop: '12px',
-                      opacity: missingDeadline ? 0.5 : 1,
                       cursor: missingDeadline ? 'not-allowed' : 'pointer',
+                      opacity: missingDeadline ? 0.6 : 1,
+                      borderColor: accentColor + '44',
                     }}
-                    disabled={missingDeadline}
-                    onClick={() => setShareOpen(true)}
+                    onClick={() => !missingDeadline && setShareOpen(true)}
                   >
-                    📋 {inviteMode === 'broadcast' ? 'Share the link' : 'Share invite links'}
-                  </button>
+                    <div style={{ fontSize: '15px', fontWeight: 500, color: accentColor }}>
+                      📋 {inviteMode === 'broadcast' ? 'Share the link' : 'Share invite links'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
+                      {inviteMode === 'broadcast' ? 'Post in your group chat' : 'Send each guest their personal link'}
+                    </div>
+                  </div>
                   <p style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>Event ID: {eventId}</p>
                   {missingDeadline && (
-                    <div style={{ ...S.card, marginTop: '12px', borderColor: '#f0c595', background: '#fdf6ec' }}>
+                    <div style={{ ...DS.card, marginTop: '12px', borderColor: '#f0c595', background: '#fdf6ec' }}>
                       <div style={{ fontSize: '13px', color: '#7a5320', marginBottom: '4px' }}>⚠️ Set a response deadline before sharing.</div>
-                      <div style={{ fontSize: '12px', color: '#7a5320' }}>Guests need a clear "RSVP by" date so the math finalizes before they're asked to pay. Edit in the Extras tab.</div>
+                      <div style={{ fontSize: '12px', color: '#7a5320' }}>Guests need a clear "RSVP by" date so the math finalizes before they're asked to pay. Edit in the Settings tab.</div>
                     </div>
                   )}
                 </>
               );
             })()}
             {!organizerEmail && (
-              <div style={{ ...S.card, marginTop: '12px', borderColor: '#f0c595', background: '#fdf6ec' }}>
-                <div style={{ fontSize: '13px', color: '#7a5320' }}>⚠️ Add your Interac email in the Extras tab so guests know where to send funds.</div>
+              <div style={{ ...DS.card, marginTop: '12px', borderColor: '#f0c595', background: '#fdf6ec' }}>
+                <div style={{ fontSize: '13px', color: '#7a5320' }}>⚠️ Add your Interac email in the Settings tab so guests know where to send funds.</div>
               </div>
             )}
           </>
         )}
 
-        {tab === 'people' && (
+        {tab === 'guests' && (
           <>
             {inviteMode === 'broadcast' && (
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px', padding: '8px 10px', background: '#f5f3ee', borderRadius: '8px' }}>
@@ -1257,7 +1344,7 @@ export default function Helmr() {
               </p>
             )}
         {people.map(p => {
-              const c = statusStyles[p.status];
+              const c = STATUS_STYLES[p.status];
               const isOrganizer = p.role === 'organizer';
               const contributed = Number(p.contributedAmount) || 0;
               const isBroadcastGuest = p.source === 'broadcast';
@@ -1267,29 +1354,29 @@ export default function Helmr() {
                 isOrganizer ? organizerIncludedInSplit : (p.status === 'confirmed' || p.status === 'paid')
               ) && shareAmt > 0;
               return (
-                <div key={p.id} style={S.card}>
+                <div key={p.id} style={DS.card}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                     <div style={{ fontSize: '15px', fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.name}
                       {isOrganizer && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · organizer</span>}
-                      {p.viewedAt && !isOrganizer && <span style={{ fontSize: '11px', color: '#085041', fontWeight: 400 }}> · viewed</span>}
+                      {p.viewedAt && !isOrganizer && <span style={{ fontSize: '11px', color: BRAND, fontWeight: 400 }}> · viewed</span>}
                       {isBroadcastGuest && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · self-added</span>}
                     </div>
                     {isOrganizer && mode === 'open_pool' && contributed > 0 && (
-                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#085041' }}>${contributed}</span>
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: BRAND }}>${contributed}</span>
                     )}
                     {!isOrganizer && mode === 'open_pool' && contributed > 0 && (
-                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#085041' }}>${contributed}</span>
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: BRAND }}>${contributed}</span>
                     )}
                     {shouldShowShare && (
-                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#085041' }}>${shareAmt}</span>
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: BRAND }}>${shareAmt}</span>
                     )}
                     {!isOrganizer && mode === 'cost_split' && (
-                      <span style={{ ...S.pill, background: c?.bg || '#eee', color: c?.fg || '#666' }} onClick={() => cycleStatus(p.id)}>{p.status}</span>
+                      <span style={{ ...DS.pill, background: c?.bg || '#eee', color: c?.fg || '#666' }} onClick={() => cycleStatus(p.id)}>{p.status}</span>
                     )}
                     {!isOrganizer && mode === 'open_pool' && (
                       <span
-                        style={{ ...S.pill, background: c?.bg || '#eeeae0', color: c?.fg || '#666' }}
+                        style={{ ...DS.pill, background: c?.bg || '#eeeae0', color: c?.fg || '#666' }}
                         onClick={() => cycleStatus(p.id)}
                       >
                         {p.status === 'invited' && contributed === 0 ? 'waiting' : p.status}
@@ -1297,8 +1384,8 @@ export default function Helmr() {
                     )}
                     {!isOrganizer && (
                       <button
-                        style={{ ...S.btnGhost, padding: '4px' }}
-                        onClick={() => {
+                        style={{ ...DS.btnGhost, padding: '4px' }}
+                        onClick={async () => {
                           const hasContributed = Number(p.contributedAmount) > 0;
                           const hasResponded = p.status && p.status !== 'invited';
                           let msg = `Remove ${p.name} from this event?`;
@@ -1307,7 +1394,7 @@ export default function Helmr() {
                           } else if (hasResponded) {
                             msg = `Remove ${p.name}? They've already responded (${p.status}). This can't be undone.`;
                           }
-                          if (confirm(msg)) {
+                          if (await dlg.confirm(msg)) {
                             setPeople(people.filter(x => x.id !== p.id));
                           }
                         }}
@@ -1335,7 +1422,7 @@ export default function Helmr() {
                               x.id === p.id ? { ...x, contributedAmount: v } : x
                             ));
                           }}
-                          style={{ ...S.input, padding: '6px 8px', fontSize: '14px', flex: 1 }}
+                          style={{ ...DS.input, padding: '6px 8px', fontSize: '14px', flex: 1 }}
                         />
                       </div>
                     </div>
@@ -1387,7 +1474,7 @@ export default function Helmr() {
                       href={`/api/events/${eventId}/screenshot?guestId=${p.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ display: 'inline-block', marginTop: '6px', fontSize: '12px', color: '#085041', textDecoration: 'none', fontWeight: 500 }}
+                      style={{ display: 'inline-block', marginTop: '6px', fontSize: '12px', color: BRAND, textDecoration: 'none', fontWeight: 500 }}
                     >
                       📎 View e-Transfer screenshot
                     </a>
@@ -1400,8 +1487,8 @@ export default function Helmr() {
             )}
             {inviteMode === 'personal' && (
               <>
-                <button style={S.btn} onClick={() => {
-                  const n = prompt('Name?');
+                <button style={DS.btn} onClick={async () => {
+                  const n = await dlg.prompt('Name?');
                   if (n) setPeople([...people, { id: newGuestId(), name: n, status: 'invited' }]);
                 }}>+ Add person</button>
                 <p style={{ fontSize: '11px', color: '#999', marginTop: '8px' }}>Guests can RSVP themselves from their link. Tap a status to manually override.</p>
@@ -1412,6 +1499,10 @@ export default function Helmr() {
 
         {tab === 'expenses' && (
           <>
+            <div style={{ ...DS.statNumber, color: accentColor, marginBottom: '16px' }}>
+              ${total.toLocaleString()}
+              <span style={{ fontSize: '13px', color: '#888', fontWeight: 400, marginLeft: '8px' }}>total</span>
+            </div>
             {mode === 'open_pool' && (
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px', padding: '8px 10px', background: '#f5f3ee', borderRadius: '8px' }}>
                 In Open Pool, expenses are just a wish-list — they don't set each person's share. Guests give what they want, and you spend what's pooled.
@@ -1428,12 +1519,12 @@ export default function Helmr() {
                 ? `Everyone (${eligible.length})`
                 : `${ids.filter(id => eligible.some(p => p.id === id)).length} of ${eligible.length}`;
               return (
-                <div key={e.id} style={S.card}>
-                  <input style={{ ...S.input, marginBottom: '8px' }} value={e.name} onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, name: ev.target.value } : x))} />
+                <div key={e.id} style={DS.card}>
+                  <input style={{ ...DS.input, marginBottom: '8px' }} value={e.name} onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, name: ev.target.value } : x))} />
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <span style={{ fontSize: '14px', color: '#777' }}>$</span>
-                    <input style={S.input} type="number" value={e.amount} onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, amount: ev.target.value } : x))} />
-                    <button style={S.btnGhost} onClick={() => setExpenses(expenses.filter(x => x.id !== e.id))}>🗑️</button>
+                    <input style={DS.input} type="number" value={e.amount} onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, amount: ev.target.value } : x))} />
+                    <button style={DS.btnGhost} onClick={() => setExpenses(expenses.filter(x => x.id !== e.id))}>🗑️</button>
                   </div>
                   {mode === 'cost_split' && (
                     <>
@@ -1458,7 +1549,7 @@ export default function Helmr() {
                       {expandedExpenseIds.has(e.id) && (
                         <div style={{ marginTop: '6px', padding: '4px 4px 0' }}>
                           {eligible.length === 0 && (
-                            <p style={{ fontSize: '12px', color: '#999', margin: '4px 0' }}>Add people on the People tab first.</p>
+                            <p style={{ fontSize: '12px', color: '#999', margin: '4px 0' }}>Add people on the Guests tab first.</p>
                           )}
                           {eligible.map(p => {
                             const onThis = hasCustom ? ids.includes(p.id) : true;
@@ -1510,7 +1601,7 @@ export default function Helmr() {
                           })}
                           {hasCustom && (
                             <button
-                              style={{ ...S.btnGhost, fontSize: '12px', padding: '4px 0', marginTop: '4px' }}
+                              style={{ ...DS.btnGhost, fontSize: '12px', padding: '4px 0', marginTop: '4px' }}
                               onClick={() => setExpenses(expenses.map(x =>
                                 x.id === e.id ? { ...x, participantIds: [] } : x
                               ))}
@@ -1525,32 +1616,53 @@ export default function Helmr() {
                 </div>
               );
             })}
-            <button style={S.btn} onClick={() => {
-              const n = prompt('Expense name?');
+            <button style={DS.btn} onClick={async () => {
+              const n = await dlg.prompt('Expense name?');
               if (n) setExpenses([...expenses, { id: Date.now(), name: n, amount: 0 }]);
             }}>+ Add expense</button>
           </>
         )}
 
-        {tab === 'extras' && (
+        {tab === 'settings' && (
           <>
-            <div style={S.card}>
+            <div style={DS.card}>
+              <div style={{ fontWeight: 500, marginBottom: '12px' }}>Account</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <span style={{ fontSize: '14px', color: '#666' }}>Plan</span>
+                <span style={{
+                  ...DS.pill,
+                  background: isProUser(session?.user) ? '#e1f5ee' : '#eeeae0',
+                  color: isProUser(session?.user) ? BRAND : '#666',
+                  cursor: 'default',
+                }}>
+                  {isProUser(session?.user) ? 'Pro' : 'Free'}
+                </span>
+              </div>
+              <button
+                style={{ ...DS.btn, color: '#E8645A', borderColor: '#fce8e4' }}
+                onClick={handleSignOut}
+              >
+                Sign out
+              </button>
+            </div>
+
+            <div style={DS.card}>
               <div style={{ fontWeight: 500, marginBottom: '8px' }}>📝 Event details</div>
 
-              <label style={S.label}>Event name</label>
-              <input style={{ ...S.input, marginBottom: '10px' }} value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. Layla's 30th" />
+              <label style={DS.label}>Event name</label>
+              <input style={{ ...DS.input, marginBottom: '10px' }} value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. Layla's 30th" />
 
-              <label style={S.label}><input type="checkbox" checked={dateTBD} onChange={() => setDateTBD(!dateTBD)} style={{ marginRight: '4px' }} /> Date TBD</label>
-              {!dateTBD && <input style={{ ...S.input, marginBottom: '10px' }} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />}
+              <label style={DS.label}><input type="checkbox" checked={dateTBD} onChange={() => setDateTBD(!dateTBD)} style={{ marginRight: '4px' }} /> Date TBD</label>
+              {!dateTBD && <input style={{ ...DS.input, marginBottom: '10px' }} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />}
 
-              <label style={S.label}><input type="checkbox" checked={locTBD} onChange={() => setLocTBD(!locTBD)} style={{ marginRight: '4px' }} /> Location TBD</label>
-              {!locTBD && <input style={{ ...S.input, marginBottom: '10px' }} placeholder="Where?" value={eventLoc} onChange={e => setEventLoc(e.target.value)} />}
+              <label style={DS.label}><input type="checkbox" checked={locTBD} onChange={() => setLocTBD(!locTBD)} style={{ marginRight: '4px' }} /> Location TBD</label>
+              {!locTBD && <input style={{ ...DS.input, marginBottom: '10px' }} placeholder="Where?" value={eventLoc} onChange={e => setEventLoc(e.target.value)} />}
 
-              <label style={S.label}>
+              <label style={DS.label}>
                 Response deadline {mode === 'cost_split' ? <span style={{ color: '#a55' }}>*</span> : <span style={{ color: '#999', fontWeight: 400 }}>(optional)</span>}
               </label>
               <input
-                style={{ ...S.input, marginBottom: '4px' }}
+                style={{ ...DS.input, marginBottom: '4px' }}
                 type="datetime-local"
                 value={responseDeadline}
                 onChange={e => setResponseDeadline(e.target.value)}
@@ -1561,9 +1673,9 @@ export default function Helmr() {
                   : 'After this, new people can\u2019t join. Already-confirmed guests can still pay.'}
               </p>
 
-              <label style={S.label}>Ask each guest for… (optional)</label>
+              <label style={DS.label}>Ask each guest for… (optional)</label>
               <input
-                style={{ ...S.input, marginBottom: '4px' }}
+                style={{ ...DS.input, marginBottom: '4px' }}
                 placeholder={mode === 'open_pool' ? "e.g. Child's name" : "e.g. Dietary restriction"}
                 value={customFieldLabel}
                 onChange={e => setCustomFieldLabel(e.target.value)}
@@ -1575,15 +1687,15 @@ export default function Helmr() {
             </div>
 
             {mode === 'open_pool' && (
-              <div style={S.card}>
+              <div style={DS.card}>
                 <div style={{ fontWeight: 500, marginBottom: '8px' }}>💵 Pool settings</div>
 
-                <label style={S.label}>Suggested contribution (optional)</label>
+                <label style={DS.label}>Suggested contribution (optional)</label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
                   <span style={{ fontSize: '14px', color: '#777' }}>$</span>
-                  <input style={S.input} type="number" min="0" placeholder="10" value={suggestionAmount || ''} onChange={e => setSuggestionAmount(e.target.value)} />
+                  <input style={DS.input} type="number" min="0" placeholder="10" value={suggestionAmount || ''} onChange={e => setSuggestionAmount(e.target.value)} />
                   <select
-                    style={{ ...S.input, width: 'auto' }}
+                    style={{ ...DS.input, width: 'auto' }}
                     value={suggestionUnit}
                     onChange={e => setSuggestionUnit(e.target.value)}
                   >
@@ -1594,20 +1706,20 @@ export default function Helmr() {
                   </select>
                 </div>
 
-                <label style={S.label}>Goal (optional)</label>
+                <label style={DS.label}>Goal (optional)</label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <span style={{ fontSize: '14px', color: '#777' }}>$</span>
-                  <input style={S.input} type="number" min="0" placeholder="Leave blank for no target" value={goal || ''} onChange={e => setGoal(e.target.value)} />
+                  <input style={DS.input} type="number" min="0" placeholder="Leave blank for no target" value={goal || ''} onChange={e => setGoal(e.target.value)} />
                 </div>
               </div>
             )}
 
-            <div style={S.card}>
+            <div style={DS.card}>
               <div style={{ fontWeight: 500, marginBottom: '4px' }}>💸 Your Interac email</div>
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Where guests send their share</p>
-              <input style={S.input} type="email" placeholder="you@example.com" value={organizerEmail} onChange={e => setOrganizerEmail(e.target.value)} />
+              <input style={DS.input} type="email" placeholder="you@example.com" value={organizerEmail} onChange={e => setOrganizerEmail(e.target.value)} />
             </div>
-            <div style={S.card}>
+            <div style={DS.card}>
               <div style={{ fontWeight: 500, marginBottom: '4px' }}>🔔 Email notifications</div>
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px' }}>
                 Choose when Helmr emails you about guest activity.
@@ -1619,11 +1731,11 @@ export default function Helmr() {
                   style={{
                     padding: '10px 8px',
                     borderRadius: '10px',
-                    border: notificationPreference === 'live' ? '2px solid #1a1a1a' : '0.5px solid #ddd',
-                    background: notificationPreference === 'live' ? '#1a1a1a' : 'white',
+                    border: notificationPreference === 'live' ? `2px solid ${BRAND}` : '0.5px solid #ddd',
+                    background: notificationPreference === 'live' ? BRAND : 'white',
                     color: notificationPreference === 'live' ? 'white' : '#1a1a1a',
                     cursor: 'pointer',
-                    fontFamily: 'inherit',
+                    fontFamily: FONT,
                     fontWeight: 500,
                   }}
                 >
@@ -1635,11 +1747,11 @@ export default function Helmr() {
                   style={{
                     padding: '10px 8px',
                     borderRadius: '10px',
-                    border: notificationPreference === 'digest' ? '2px solid #1a1a1a' : '0.5px solid #ddd',
-                    background: notificationPreference === 'digest' ? '#1a1a1a' : 'white',
+                    border: notificationPreference === 'digest' ? `2px solid ${BRAND}` : '0.5px solid #ddd',
+                    background: notificationPreference === 'digest' ? BRAND : 'white',
                     color: notificationPreference === 'digest' ? 'white' : '#1a1a1a',
                     cursor: 'pointer',
-                    fontFamily: 'inherit',
+                    fontFamily: FONT,
                     fontWeight: 500,
                   }}
                 >
@@ -1650,7 +1762,7 @@ export default function Helmr() {
                 Live updates send individual emails. Daily digest groups activity into a summary.
               </p>
             </div>
-            <div style={S.card}>
+            <div style={DS.card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 500, marginBottom: '4px' }}>🎩 Tip the planner</div>
@@ -1680,22 +1792,24 @@ export default function Helmr() {
                 );
               })()}
             </div>
-            <div style={S.card}>
+            <div style={DS.card}>
               <div style={{ fontWeight: 500, marginBottom: '4px' }}>🎁 Surprise gift</div>
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Propose a gift; requires organizer approval</p>
-              <button style={S.btn} onClick={() => alert('Surprise gift flow — propose a gift, organizer approves before it shows up to other guests.')}>+ Propose surprise gift</button>
+              <button style={DS.btn} onClick={async () => { await dlg.alert('Surprise gift flow — propose a gift, organizer approves before it shows up to other guests.'); }}>+ Propose surprise gift</button>
             </div>
           </>
         )}
+        </div>
       </div>
-    );
+      );
+    }
   };
 
   if (authLoading) {
     const { hasAuthToken } = getAuthParamsInUrl();
     return (
-      <div style={S.page}>
-        <div style={{ ...S.frame, minHeight: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '14px' }}>
+      <div style={DS.page}>
+        <div style={{ ...DS.frame, minHeight: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '14px' }}>
           {hasAuthToken ? 'Signing you in...' : 'Loading...'}
         </div>
       </div>
@@ -1707,10 +1821,25 @@ export default function Helmr() {
   }
 
   return (
-    <div style={S.page}>
-      <div style={S.frame}>{renderScreen()}</div>
-      <button style={S.feedbackBtn} onClick={() => setFeedbackOpen(true)}>💬 Feedback</button>
-      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} currentScreen={screen} />
+    <div style={DS.page}>
+      <div style={DS.frame}>
+        {screen === 'dashboard' ? (
+          <div style={DS.screenBody}>{renderScreen()}</div>
+        ) : (
+          renderScreen()
+        )}
+        {screen === 'dashboard' && (
+          <BottomNav activeTab={tab} onTabChange={setTab} onNewEvent={startNewEvent} />
+        )}
+      </div>
+      <button style={DS.feedbackBtn} onClick={() => setFeedbackOpen(true)}>💬 Feedback</button>
+      <AppDialog dialog={dialog} onClose={() => setDialog(null)} />
+      <FeedbackModal
+        open={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        currentScreen={screen}
+        onAlert={msg => dlg.alert(msg)}
+      />
       <ShareModal
         open={shareOpen}
         onClose={() => setShareOpen(false)}
