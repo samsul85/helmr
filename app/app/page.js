@@ -18,21 +18,21 @@ const eventTypes = [
   // School / community / fundraising types first — these are what PAC organizers
   // and community groups look for. A school treasurer evaluating Helmr should see
   // relevant options immediately, not a screen of trips and bachelor parties.
-  { id: 'fundraiser', icon: '💛', label: 'Fundraiser', expenses: [], defaultMode: 'open_pool' },
-  { id: 'potluck', icon: '🥗', label: 'Potluck / Class fund', expenses: [], defaultMode: 'open_pool' },
-  { id: 'gift', icon: '🎁', label: 'Group gift', expenses: ['Main gift', 'Card', 'Wrapping'], defaultMode: 'open_pool' },
-  { id: 'team', icon: '🏅', label: 'Team / Club fees', expenses: ['Equipment', 'Tournament fees', 'Uniforms', 'Travel'], defaultMode: 'cost_split' },
-  { id: 'grad', icon: '🎓', label: 'Graduation', expenses: ['Venue', 'Catering', 'Photographer', 'Decor'], defaultMode: 'cost_split' },
+  { id: 'fundraiser', icon: '💛', tablerIcon: 'ti-heart', label: 'Fundraiser', expenses: [], defaultMode: 'open_pool' },
+  { id: 'potluck', icon: '🥗', tablerIcon: 'ti-tools-kitchen-2', label: 'Potluck / Class fund', expenses: [], defaultMode: 'open_pool' },
+  { id: 'gift', icon: '🎁', tablerIcon: 'ti-gift', label: 'Group gift', expenses: ['Main gift', 'Card', 'Wrapping'], defaultMode: 'open_pool' },
+  { id: 'team', icon: '🏅', tablerIcon: 'ti-trophy', label: 'Team / Club fees', expenses: ['Equipment', 'Tournament fees', 'Uniforms', 'Travel'], defaultMode: 'cost_split' },
+  { id: 'grad', icon: '🎓', tablerIcon: 'ti-school', label: 'Graduation', expenses: ['Venue', 'Catering', 'Photographer', 'Decor'], defaultMode: 'cost_split' },
   // Social / personal types
-  { id: 'trip', icon: '✈️', label: 'Trip', expenses: ['Hotel', 'Flights', 'Excursions', 'Meals', 'Transport'], defaultMode: 'cost_split' },
-  { id: 'dinner', icon: '🍽️', label: 'Dinner', expenses: ['Restaurant', 'Drinks', 'Dessert', 'Tip'], defaultMode: 'cost_split' },
-  { id: 'bday', icon: '🎂', label: 'Birthday', expenses: ['Venue', 'Cake', 'Decor', 'Catering', 'Gift'], defaultMode: 'cost_split' },
-  { id: 'concert', icon: '🎵', label: 'Concert', expenses: ['Tickets', 'Transport', 'Pre-drinks', 'Food'], defaultMode: 'cost_split' },
-  { id: 'golf', icon: '🏌️', label: 'Golf day', expenses: ['Green fees', 'Cart', 'Food', 'Prizes'], defaultMode: 'cost_split' },
-  { id: 'bach', icon: '🎉', label: 'Bachelor/ette', expenses: ['Accommodation', 'Activities', 'Dinner', 'Drinks', 'Decor'], defaultMode: 'cost_split' },
-  { id: 'offsite', icon: '🏢', label: 'Offsite', expenses: ['Venue', 'Accommodation', 'Activities', 'Catering', 'AV'], defaultMode: 'cost_split' },
-  { id: 'beach', icon: '🏖️', label: 'Beach day', expenses: ['Rental', 'Food', 'Drinks', 'Equipment'], defaultMode: 'cost_split' },
-  { id: 'other', icon: '➕', label: 'Other', expenses: [], defaultMode: 'cost_split' },
+  { id: 'trip', icon: '✈️', tablerIcon: 'ti-plane', label: 'Trip', expenses: ['Hotel', 'Flights', 'Excursions', 'Meals', 'Transport'], defaultMode: 'cost_split' },
+  { id: 'dinner', icon: '🍽️', tablerIcon: 'ti-fork', label: 'Dinner', expenses: ['Restaurant', 'Drinks', 'Dessert', 'Tip'], defaultMode: 'cost_split' },
+  { id: 'bday', icon: '🎂', tablerIcon: 'ti-cake', label: 'Birthday', expenses: ['Venue', 'Cake', 'Decor', 'Catering', 'Gift'], defaultMode: 'cost_split' },
+  { id: 'concert', icon: '🎵', tablerIcon: 'ti-music', label: 'Concert', expenses: ['Tickets', 'Transport', 'Pre-drinks', 'Food'], defaultMode: 'cost_split' },
+  { id: 'golf', icon: '🏌️', tablerIcon: 'ti-ball-golf', label: 'Golf day', expenses: ['Green fees', 'Cart', 'Food', 'Prizes'], defaultMode: 'cost_split' },
+  { id: 'bach', icon: '🎉', tablerIcon: 'ti-confetti', label: 'Bachelor/ette', expenses: ['Accommodation', 'Activities', 'Dinner', 'Drinks', 'Decor'], defaultMode: 'cost_split' },
+  { id: 'offsite', icon: '🏢', tablerIcon: 'ti-building', label: 'Offsite', expenses: ['Venue', 'Accommodation', 'Activities', 'Catering', 'AV'], defaultMode: 'cost_split' },
+  { id: 'beach', icon: '🏖️', tablerIcon: 'ti-beach', label: 'Beach day', expenses: ['Rental', 'Food', 'Drinks', 'Equipment'], defaultMode: 'cost_split' },
+  { id: 'other', icon: '➕', tablerIcon: 'ti-plus', label: 'Other', expenses: [], defaultMode: 'cost_split' },
 ];
 
 function newGuestId() {
@@ -958,7 +958,7 @@ export default function Helmr() {
                   fontFamily: FONT,
                 }}
               >
-                <div style={{ fontSize: '32px', marginBottom: '6px' }}>{e.icon}</div>
+                <i className={`ti ${e.tablerIcon}`} style={{ color: 'white', fontSize: '36px', marginBottom: '6px', display: 'block' }} />
                 {e.label}
               </div>
             );
