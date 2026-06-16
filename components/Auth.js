@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AUTH_REDIRECT_PATH, getSupabaseClient } from '@/lib/supabase';
+import { getSupabaseClient } from '@/lib/supabase';
 
 const S = {
   page: {
@@ -102,9 +102,7 @@ export default function Auth() {
       const { error: signInError } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          // Land on /app directly so iOS Safari/PWA can process tokens client-side.
-          // Supabase dashboard redirect URL must include: {origin}/app
-          emailRedirectTo: `${window.location.origin}${AUTH_REDIRECT_PATH}`,
+          emailRedirectTo: `${window.location.origin}/app`,
         },
       });
 

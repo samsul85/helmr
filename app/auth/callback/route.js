@@ -40,5 +40,6 @@ export async function GET(request) {
     console.error('Supabase auth code exchange failed:', error.message);
   }
 
+  // Always send users to /app after code exchange (success or failure).
   return response;
 }

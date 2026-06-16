@@ -10,8 +10,20 @@
 // after the Tricia call confirms (or reframes) the niche.
 
 import { useEffect } from 'react';
+import { getSupabaseClient } from '@/lib/supabase';
 
 const WAITLIST_URL = 'https://forms.gle/N1Hj3eh2VGiTApVi7';
+
+function getAuthParamsInUrl() {
+  if (typeof window === 'undefined') return { hasAuthToken: false };
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const queryParams = new URLSearchParams(window.location.search);
+  const hasAuthToken =
+    hashParams.has('access_token') ||
+    hashParams.has('refresh_token') ||
+    queryParams.has('code');
+  return { hasAuthToken };
+}
 
 const S = {
   page: {
@@ -255,6 +267,47 @@ const S = {
 };
 
 export default function LandingPage() {
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = getSupabaseClient();
+
+    const redirectToApp = (preserveAuthParams = false) => {
+      if (preserveAuthParams) {
+        window.location.href = `/app${window.location.search}${window.location.hash}`;
+        return;
+      }
+      window.location.href = '/app';
+    };
+
+    const bounceAuthenticatedUsersToApp = async () => {
+      const { hasAuthToken } = getAuthParamsInUrl();
+
+      // Magic link landed on / instead of /app — forward auth params so /app can finish sign-in.
+      if (hasAuthToken) {
+        redirectToApp(true);
+        return;
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+
+      if (data.session) {
+        redirectToApp(false);
+      }
+    };
+
+    bounceAuthenticatedUsersToApp();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) redirectToApp(false);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   useEffect(() => {
     // Track landing-page view explicitly so we can see it in PostHog separately
     // from in-app navigation. (The provider also fires $pageview automatically.)
