@@ -5,6 +5,8 @@ import { applySupabaseCookies, getSupabaseUserFromRequest } from '@/lib/supabase
 
 export const runtime = 'nodejs';
 
+const LOCAL_OWNER_ID = 'local-user';
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -16,6 +18,31 @@ export async function POST(request) {
     const ownerId = typeof body.ownerId === 'string' ? body.ownerId.trim() : '';
     if (!ownerId) {
       return NextResponse.json({ error: 'Missing ownerId' }, { status: 400 });
+    }
+
+    if (ownerId === LOCAL_OWNER_ID) {
+      const event = await createEvent({
+        ownerId,
+        eventType: body.eventType || null,
+        eventName: body.eventName || '',
+        eventDate: body.eventDate || '',
+        eventLoc: body.eventLoc || '',
+        dateTBD: !!body.dateTBD,
+        locTBD: !!body.locTBD,
+        organizerName: body.organizerName || 'Organizer',
+        organizerEmail: body.organizerEmail || '',
+        mode: body.mode === 'open_pool' ? 'open_pool' : 'cost_split',
+        inviteMode: body.inviteMode === 'broadcast' ? 'broadcast' : 'personal',
+        goal: Number(body.goal) || 0,
+        suggestionAmount: Number(body.suggestionAmount) || 0,
+        suggestionUnit: body.suggestionUnit || '',
+        notificationPreference: body.notificationPreference === 'digest' ? 'digest' : 'live',
+        people: body.people || [],
+        expenses: body.expenses || [],
+        tip: Number(body.tip) || 0,
+        viewCount: 0,
+      });
+      return NextResponse.json(event);
     }
 
     const { user, cookiesToSet } = await getSupabaseUserFromRequest(request);

@@ -1,18 +1,16 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import Auth from '../../components/Auth';
 import UpgradeModal from '../../components/UpgradeModal';
 import AppDialog, { createDialogHelpers } from '../../components/AppDialog';
 import BottomNav from '../../components/BottomNav';
-import { getSupabaseClient } from '../../lib/supabase';
-import { isProUser } from '../../lib/pro';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
 import { BRAND, DS, getEventColor, STATUS_STYLES, FONT } from '../../lib/design';
 
 // ============ CONFIG ============
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mredzlyn';
 const LS_KEY = 'helmr.events.v1';
+const OWNER_ID = 'local-user';
 
 const eventTypes = [
   // School / community / fundraising types first — these are what PAC organizers
@@ -66,36 +64,6 @@ function removeEventFromLocal(id) {
   } catch {}
 }
 
-function getAuthParamsInUrl() {
-  if (typeof window === 'undefined') return { hasAuthToken: false, code: null };
-  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  const queryParams = new URLSearchParams(window.location.search);
-  const hasAuthToken =
-    hashParams.has('access_token') ||
-    hashParams.has('refresh_token') ||
-    queryParams.has('code');
-  return { hasAuthToken, code: queryParams.get('code') };
-}
-
-function cleanAuthParamsFromUrl() {
-  if (typeof window === 'undefined') return;
-  window.history.replaceState(null, '', window.location.pathname);
-}
-
-// Temporary design-testing bypass — remove before production launch.
-function isPreviewMode() {
-  if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).get('preview') === '1';
-}
-
-const PREVIEW_SESSION = {
-  user: {
-    id: 'preview-user',
-    email: 'preview@helmr.ca',
-    user_metadata: { plan: 'free' },
-  },
-};
-
 function normalizeSavedEvent(event) {
   if (!event || !event.id) return null;
   return {
@@ -108,17 +76,6 @@ function normalizeSavedEvent(event) {
     pooled: Number(event.pooled) || 0,
     updatedAt: Number(event.updatedAt || event.createdAt) || Date.now(),
   };
-}
-
-async function fetchUserEventSummaries() {
-  const res = await fetch(`${window.location.origin}/api/user/events`, {
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error('Failed to load user events');
-  const data = await res.json();
-  return Array.isArray(data.events)
-    ? data.events.map(normalizeSavedEvent).filter(Boolean)
-    : [];
 }
 
 // Convert a <input type="datetime-local"> value (no timezone, e.g. "2026-05-23T22:20")
@@ -356,8 +313,6 @@ function ShareModal({ open, onClose, event }) {
 }
 
 export default function Helmr() {
-  const [session, setSession] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
   const [screen, setScreen] = useState('welcome');
   const [eventId, setEventId] = useState(null);
   const [eventType, setEventType] = useState(null);
@@ -403,95 +358,8 @@ export default function Helmr() {
   };
 
   const [savedEvents, setSavedEvents] = useState([]);
-  const [userEventsLoading, setUserEventsLoading] = useState(false);
   useEffect(() => {
-    if (isPreviewMode()) {
-      setSession(PREVIEW_SESSION);
-      setAuthLoading(false);
-      return;
-    }
-
-    let mounted = true;
-    const supabase = getSupabaseClient();
-    const { hasAuthToken, code } = getAuthParamsInUrl();
-
-    const applySession = (nextSession) => {
-      if (!mounted) return;
-      setSession(nextSession);
-      setAuthLoading(false);
-      if (nextSession && hasAuthToken) cleanAuthParamsFromUrl();
-    };
-
-    const loadSession = async () => {
-      try {
-        if (hasAuthToken) {
-          // iOS Safari opens magic links in a new tab; give Supabase time to parse URL tokens.
-          await new Promise(resolve => setTimeout(resolve, 500));
-          if (code) {
-            const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-            if (!error && data.session) {
-              applySession(data.session);
-              return;
-            }
-          }
-        }
-
-        const { data } = await supabase.auth.getSession();
-        applySession(data.session);
-      } catch {
-        if (mounted) setAuthLoading(false);
-      }
-    };
-
-    loadSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (!mounted) return;
-      // Don't flash the sign-in screen while magic-link tokens are still being processed.
-      if (hasAuthToken && !nextSession) return;
-      setSession(nextSession);
-      setAuthLoading(false);
-      if (nextSession && hasAuthToken) cleanAuthParamsFromUrl();
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-  useEffect(() => {
-    if (!session?.user?.id) {
-      setSavedEvents([]);
-      setUserEventsLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setUserEventsLoading(true);
-    fetchUserEventSummaries()
-      .then(events => {
-        if (!cancelled) setSavedEvents(events);
-      })
-      .catch(() => {
-        if (!cancelled) setSavedEvents([]);
-      })
-      .finally(() => {
-        if (!cancelled) setUserEventsLoading(false);
-      });
-
-    return () => { cancelled = true; };
-  }, [session?.user?.id]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    if (!params.has('upgraded')) return;
-
-    const supabase = getSupabaseClient();
-    supabase.auth.refreshSession().then(({ data }) => {
-      if (data.session) setSession(data.session);
-      window.history.replaceState(null, '', window.location.pathname);
-    });
+    setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
   }, []);
 
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
@@ -714,38 +582,16 @@ export default function Helmr() {
 
   // Reset all event state so "Plan something new" starts from a clean slate.
   // Without this, fields from the previously-open event leak into the new one.
-  const checkEventLimit = async () => {
-    const supabase = getSupabaseClient();
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error || !user) return { blocked: false, user: null };
-
-    if (isProUser(user)) {
-      return { blocked: false, user };
-    }
-
-    const events = await fetchUserEventSummaries();
-    setSavedEvents(events);
-    return { blocked: events.length >= 1, user };
+  const checkEventLimit = () => {
+    const count = loadSavedEvents().length;
+    return { blocked: count >= 1 };
   };
 
   const startNewEvent = async () => {
-    if (userEventsLoading) {
-      await dlg.alert('Still loading your events — please try again in a moment.');
+    const { blocked } = checkEventLimit();
+    if (blocked) {
+      setUpgradeOpen(true);
       return;
-    }
-
-    try {
-      const { blocked } = await checkEventLimit();
-      if (blocked) {
-        setUpgradeOpen(true);
-        return;
-      }
-    } catch (err) {
-      console.error('Event limit check failed:', err);
-      if (!isProUser(session?.user) && savedEvents.length >= 1) {
-        setUpgradeOpen(true);
-        return;
-      }
     }
 
     setEventId(null);
@@ -773,12 +619,6 @@ export default function Helmr() {
     setScreen('chooseType');
   };
 
-  const handleSignOut = async () => {
-    const supabase = getSupabaseClient();
-    await supabase.auth.signOut();
-    window.location.href = '/';
-  };
-
   const cycleStatus = (id) => {
     const cycle = ['invited', 'confirmed', 'paid', 'declined'];
     setPeople(people.map(p => {
@@ -804,12 +644,7 @@ export default function Helmr() {
     }
     try {
       setSaving(true);
-      const { blocked, user } = await checkEventLimit();
-      if (!user) {
-        setSession(null);
-        await dlg.alert('Please sign in again.');
-        return;
-      }
+      const { blocked } = checkEventLimit();
       if (blocked) {
         setUpgradeOpen(true);
         return;
@@ -818,9 +653,8 @@ export default function Helmr() {
       const res = await fetch(`${window.location.origin}/api/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
-          ownerId: user.id,
+          ownerId: OWNER_ID,
           eventType, eventName, eventDate, eventLoc, dateTBD, locTBD,
           organizerName, organizerEmail,
           mode, inviteMode, goal: Number(goal) || 0,
@@ -841,9 +675,17 @@ export default function Helmr() {
       }
       const data = await res.json();
       setEventId(data.id);
-      saveEventToLocal({ id: data.id, name: eventName || 'Untitled event', updatedAt: Date.now() });
-      const savedEvent = normalizeSavedEvent(data);
-      setSavedEvents(savedEvent ? [savedEvent] : []);
+      saveEventToLocal({
+        id: data.id,
+        name: eventName || 'Untitled event',
+        eventType,
+        mode,
+        responseDeadline: datetimeLocalToIso(responseDeadline),
+        total: 0,
+        pooled: 0,
+        updatedAt: Date.now(),
+      });
+      setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
       setScreen('dashboard');
     } catch (e) {
       await dlg.alert("Couldn't save event — please try again.");
@@ -869,12 +711,6 @@ export default function Helmr() {
         </div>
 
         <div style={{ padding: '0 20px 24px' }}>
-          {userEventsLoading && (
-            <p style={{ fontSize: '13px', color: '#777', margin: '0 0 16px' }}>
-              Loading your events...
-            </p>
-          )}
-
           {savedEvents.length > 0 && (
             <div style={{ marginBottom: '20px' }}>
               <div style={{ ...DS.label, marginBottom: '10px' }}>Your events</div>
@@ -1650,19 +1486,13 @@ export default function Helmr() {
                 <span style={{ fontSize: '14px', color: '#666' }}>Plan</span>
                 <span style={{
                   ...DS.pill,
-                  background: isProUser(session?.user) ? '#e1f5ee' : '#eeeae0',
-                  color: isProUser(session?.user) ? BRAND : '#666',
+                  background: '#eeeae0',
+                  color: '#666',
                   cursor: 'default',
                 }}>
-                  {isProUser(session?.user) ? 'Pro' : 'Free'}
+                  Free
                 </span>
               </div>
-              <button
-                style={{ ...DS.btn, color: '#E8645A', borderColor: '#fce8e4' }}
-                onClick={handleSignOut}
-              >
-                Sign out
-              </button>
             </div>
 
             <div style={DS.card}>
@@ -1824,23 +1654,6 @@ export default function Helmr() {
     }
   };
 
-  const previewMode = isPreviewMode();
-
-  if (authLoading && !previewMode) {
-    const { hasAuthToken } = getAuthParamsInUrl();
-    return (
-      <div style={DS.page}>
-        <div style={{ ...DS.frame, minHeight: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '14px' }}>
-          {hasAuthToken ? 'Signing you in...' : 'Loading...'}
-        </div>
-      </div>
-    );
-  }
-
-  if (!session && !previewMode) {
-    return <Auth />;
-  }
-
   return (
     <div style={DS.page}>
       <div style={DS.frame}>
@@ -1869,7 +1682,7 @@ export default function Helmr() {
       <UpgradeModal
         open={upgradeOpen}
         onClose={() => setUpgradeOpen(false)}
-        email={session?.user?.email || ''}
+        email={organizerEmail}
       />
     </div>
   );
