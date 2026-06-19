@@ -10,13 +10,17 @@ const NAV_ITEMS = [
   { id: 'settings', label: 'Settings', icon: 'ti-settings' },
 ];
 
-export default function BottomNav({ activeTab, onHome, onActivity, onTabChange, onNewEvent }) {
+export default function BottomNav({ activeTab, isWelcome, onHome, onActivity, onTabChange, onNewEvent }) {
   const renderItem = (item) => {
     const isActive = item.id === 'home'
-      ? false
+      ? isWelcome
       : item.id === 'activity'
-        ? activeTab === 'home'
-        : activeTab === item.id;
+        ? false
+        : item.id === 'guests'
+          ? activeTab === 'people'
+          : item.id === 'settings'
+            ? activeTab === 'extras'
+            : activeTab === item.id;
 
     const onClick = () => {
       if (item.id === 'home') onHome();

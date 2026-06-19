@@ -826,7 +826,7 @@ export default function Helmr() {
       );
 
       return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', paddingBottom: '100px' }}>
         <div style={{
           background: TEAL_LIGHT,
           padding: '48px 24px 32px',
@@ -1191,7 +1191,7 @@ export default function Helmr() {
           <button
             type="button"
             aria-label="Settings menu"
-            onClick={() => setTab('settings')}
+            onClick={() => setTab('extras')}
             style={{ background: 'none', border: 'none', color: 'white', padding: '4px', cursor: 'pointer', display: 'flex' }}
           >
             <i className="ti ti-dots" style={{ fontSize: '20px' }} />
@@ -1494,7 +1494,7 @@ export default function Helmr() {
           </>
         )}
 
-        {tab === 'guests' && (
+        {tab === 'people' && (
           <div style={{ padding: '16px' }}>
             {inviteMode === 'broadcast' && (
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 12px', padding: '10px 14px', background: '#f5f3ee', borderRadius: '14px' }}>
@@ -1800,7 +1800,7 @@ export default function Helmr() {
           </div>
         )}
 
-        {tab === 'settings' && (
+        {tab === 'extras' && (
           <div style={{ padding: '16px' }}>
             <div style={{ ...DS.card, marginBottom: '10px' }}>
               <div style={{ fontWeight: 500, marginBottom: '12px' }}>Account</div>
@@ -2002,12 +2002,18 @@ export default function Helmr() {
           <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>{renderScreen()}</div>
         )}
       </div>
-      {screen === 'dashboard' && (
+      {(screen === 'welcome' || screen === 'dashboard') && (
         <BottomNav
           activeTab={tab}
+          isWelcome={screen === 'welcome'}
           onHome={() => setScreen('welcome')}
-          onActivity={() => setTab('home')}
-          onTabChange={setTab}
+          onActivity={() => alert('Coming soon')}
+          onTabChange={(tabId) => {
+            if (screen !== 'dashboard') return;
+            if (tabId === 'guests') setTab('people');
+            else if (tabId === 'expenses') setTab('expenses');
+            else if (tabId === 'settings') setTab('extras');
+          }}
           onNewEvent={startNewEvent}
         />
       )}
