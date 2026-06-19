@@ -5,7 +5,7 @@ import UpgradeModal from '../../components/UpgradeModal';
 import AppDialog, { createDialogHelpers } from '../../components/AppDialog';
 import BottomNav from '../../components/BottomNav';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
-import { BRAND, DS, getEventColor, STATUS_STYLES, FONT } from '../../lib/design';
+import { BRAND, CREAM, DS, getEventColor, STATUS_STYLES, FONT } from '../../lib/design';
 
 // ============ CONFIG ============
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mredzlyn';
@@ -74,8 +74,42 @@ function normalizeSavedEvent(event) {
     responseDeadline: event.responseDeadline || '',
     total: Number(event.total) || 0,
     pooled: Number(event.pooled) || 0,
+    goal: Number(event.goal) || 0,
+    paidCount: Number(event.paidCount) || 0,
+    guestCount: Number(event.guestCount) || 0,
     updatedAt: Number(event.updatedAt || event.createdAt) || Date.now(),
   };
+}
+
+function colorWithAlpha(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function isWelcomeEventDone(ev) {
+  if (!ev.responseDeadline) return false;
+  const d = new Date(ev.responseDeadline);
+  return !isNaN(d.getTime()) && d.getTime() < Date.now();
+}
+
+function welcomeEventSubtitle(ev) {
+  if (ev.mode === 'open_pool') {
+    const collected = ev.pooled || 0;
+    if (ev.goal > 0) {
+      return `$${collected.toLocaleString()} of $${ev.goal.toLocaleString()} goal`;
+    }
+    return `$${collected.toLocaleString()} collected`;
+  }
+  const paid = ev.paidCount || 0;
+  const guests = ev.guestCount || 0;
+  const amount = ev.total || 0;
+  if (guests > 0) {
+    return `${paid} of ${guests} paid · $${amount.toLocaleString()} collected`;
+  }
+  return `$${amount.toLocaleString()} total`;
 }
 
 // Convert a <input type="datetime-local"> value (no timezone, e.g. "2026-05-23T22:20")
@@ -457,6 +491,21 @@ export default function Helmr() {
       setPeople(data.people || [{ id: 'organizer', name: 'You', status: 'organizer', role: 'organizer' }]);
       setExpenses(data.expenses || []);
       setTipsEnabled(!!data.tipsEnabled);
+      const guests = (data.people || []).filter(p => p.role !== 'organizer');
+      const expenses = data.expenses || [];
+      saveEventToLocal({
+        id: data.id,
+        name: data.eventName || 'Untitled event',
+        eventType: data.eventType || 'other',
+        mode: loadedMode,
+        responseDeadline: data.responseDeadline || '',
+        total: expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0),
+        pooled: (data.people || []).reduce((s, p) => s + (Number(p.contributedAmount) || 0), 0),
+        goal: Number(data.goal) || 0,
+        paidCount: guests.filter(p => p.status === 'paid').length,
+        guestCount: guests.length,
+        updatedAt: Date.now(),
+      });
       setScreen('dashboard');
     } catch {
       await dlg.alert("Couldn't load event.");
@@ -494,7 +543,22 @@ export default function Helmr() {
             knownGuestIds: Array.from(knownGuestIdsRef.current),
           }),
         });
-        if (eventId) saveEventToLocal({ id: eventId, name: eventName || 'Untitled event', updatedAt: Date.now() });
+        if (eventId) {
+          const guests = people.filter(p => p.role !== 'organizer');
+          saveEventToLocal({
+            id: eventId,
+            name: eventName || 'Untitled event',
+            eventType,
+            mode,
+            responseDeadline: datetimeLocalToIso(responseDeadline),
+            total: expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0),
+            pooled: people.reduce((s, p) => s + (Number(p.contributedAmount) || 0), 0),
+            goal: Number(goal) || 0,
+            paidCount: guests.filter(p => p.status === 'paid').length,
+            guestCount: guests.length,
+            updatedAt: Date.now(),
+          });
+        }
       } catch (e) {
         console.error('Save failed', e);
       } finally {
@@ -681,8 +745,11 @@ export default function Helmr() {
         eventType,
         mode,
         responseDeadline: datetimeLocalToIso(responseDeadline),
-        total: 0,
+        total: expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0),
         pooled: 0,
+        goal: Number(goal) || 0,
+        paidCount: 0,
+        guestCount: 0,
         updatedAt: Date.now(),
       });
       setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
@@ -696,76 +763,187 @@ export default function Helmr() {
 
   const renderScreen = () => {
     if (screen === 'welcome') return (
-      <div>
-        <div style={DS.tealHeader}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-            <img src="/logo.svg" alt="Helmr" style={{ width: '36px', height: '36px' }} />
-            <span style={{ fontSize: '22px', fontWeight: 500 }}>Helmr</span>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '85vh' }}>
+        <div style={{
+          position: 'relative',
+          minHeight: '45vh',
+          background: '#E1F5EE',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '16px 20px 24px',
+          overflow: 'hidden',
+          borderRadius: '20px 20px 0 0',
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: -48,
+            right: -40,
+            width: 180,
+            height: 180,
+            borderRadius: '50%',
+            background: 'rgba(15,110,86,0.06)',
+            pointerEvents: 'none',
+          }} />
+          <div style={{
+            position: 'absolute',
+            top: 72,
+            right: 32,
+            width: 96,
+            height: 96,
+            borderRadius: '50%',
+            background: 'rgba(15,110,86,0.06)',
+            pointerEvents: 'none',
+          }} />
+
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            position: 'relative',
+            zIndex: 1,
+          }}>
+            <img src="/logo.svg" alt="Helmr" style={{ width: '32px', height: '32px' }} />
+            <div style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '50%',
+              border: `2px solid ${BRAND}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'white',
+            }}>
+              <i className="ti ti-user" style={{ fontSize: '20px', color: BRAND }} />
+            </div>
           </div>
-          <p style={{ margin: 0, fontSize: '16px', opacity: 0.9 }}>
-            Hey {organizerName || 'there'} 👋
-          </p>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', opacity: 0.75 }}>
-            Take the helm of your next group plan
-          </p>
+
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            textAlign: 'center',
+            padding: '28px 0 24px',
+            position: 'relative',
+            zIndex: 1,
+          }}>
+            <p style={{ margin: '0 0 12px', fontSize: '15px', color: '#085041', fontWeight: 500 }}>
+              Hey {organizerName || 'there'} 👋
+            </p>
+            <h1 style={{
+              margin: '0 0 12px',
+              fontSize: '32px',
+              color: '#085041',
+              fontWeight: 500,
+              lineHeight: 1.15,
+              letterSpacing: '-0.02em',
+            }}>
+              Take the helm of your next group plan.
+            </h1>
+            <p style={{ margin: 0, fontSize: '14px', color: '#0F6E56', opacity: 0.75 }}>
+              Collect money upfront — no chasing, no spreadsheets.
+            </p>
+          </div>
+
+          <button
+            style={{
+              width: '100%',
+              padding: '16px',
+              borderRadius: '14px',
+              border: 'none',
+              background: BRAND,
+              color: 'white',
+              fontSize: '15px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              fontFamily: FONT,
+              position: 'relative',
+              zIndex: 1,
+            }}
+            onClick={startNewEvent}
+          >
+            + Plan something new
+          </button>
         </div>
 
-        <div style={{ padding: '0 20px 24px' }}>
-          {savedEvents.length > 0 && (
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ ...DS.label, marginBottom: '10px' }}>Your events</div>
-              {savedEvents.map(ev => {
-                const evColor = getEventColor(ev.eventType);
-                const typeInfo = eventTypes.find(t => t.id === ev.eventType);
-                const statAmt = ev.mode === 'open_pool' ? ev.pooled : ev.total;
-                const statLabel = ev.mode === 'open_pool' ? 'pooled' : 'total';
-                const evDeadline = ev.responseDeadline ? formatDeadline(new Date(ev.responseDeadline)) : null;
-                return (
-                  <div
-                    key={ev.id}
-                    style={{
-                      ...DS.card,
-                      display: 'flex',
-                      alignItems: 'stretch',
-                      cursor: loading ? 'wait' : 'pointer',
-                      borderLeft: `4px solid ${evColor}`,
-                      padding: 0,
-                      overflow: 'hidden',
-                    }}
-                    onClick={() => !loading && resumeEvent(ev.id)}
-                  >
-                    <div style={{ flex: 1, padding: '14px 14px 14px 12px', minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '20px' }}>{typeInfo?.icon || '📋'}</span>
-                        <div style={{ fontSize: '15px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.name}</div>
-                      </div>
-                      <div style={{ fontSize: '13px', color: evColor, fontWeight: 500 }}>
-                        ${statAmt.toLocaleString()} {statLabel}
-                      </div>
-                      {evDeadline && (
-                        <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
-                          ⏰ RSVP by {evDeadline}
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      style={{ ...DS.btnGhost, alignSelf: 'center', padding: '8px 12px', fontSize: '14px' }}
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (await dlg.confirm(`Remove "${ev.name}" from this list? (The event itself isn't deleted.)`)) {
-                          removeEventFromLocal(ev.id);
-                          setSavedEvents(prev => prev.filter(x => x.id !== ev.id));
-                        }
-                      }}
-                    >✕</button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        <div style={{ flex: 1, background: CREAM, padding: '20px 16px' }}>
+          <div style={{
+            fontSize: '12px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: '#888',
+            fontWeight: 500,
+            marginBottom: '12px',
+          }}>
+            Your events
+          </div>
 
-          <button style={{ ...DS.btn, ...DS.btnPrimary }} onClick={startNewEvent}>Plan something new</button>
-          <p style={{ fontSize: '11px', color: '#999', marginTop: '16px', textAlign: 'center' }}>Prototype — events saved for 90 days</p>
+          {savedEvents.map(ev => {
+            const evColor = getEventColor(ev.eventType);
+            const typeInfo = eventTypes.find(t => t.id === ev.eventType);
+            const done = isWelcomeEventDone(ev);
+            return (
+              <div
+                key={ev.id}
+                style={{
+                  background: 'white',
+                  borderRadius: '18px',
+                  border: '0.5px solid #e8e4d8',
+                  padding: '16px',
+                  marginBottom: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  cursor: loading ? 'wait' : 'pointer',
+                }}
+                onClick={() => !loading && resumeEvent(ev.id)}
+              >
+                <div style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '14px',
+                  background: colorWithAlpha(evColor, 0.12),
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <i
+                    className={`ti ${typeInfo?.tablerIcon || 'ti-plus'}`}
+                    style={{ fontSize: '22px', color: evColor }}
+                  />
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: '15px',
+                    fontWeight: 500,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    marginBottom: '2px',
+                  }}>
+                    {ev.name}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#888' }}>
+                    {welcomeEventSubtitle(ev)}
+                  </div>
+                </div>
+
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  flexShrink: 0,
+                  background: done ? '#eeeae0' : colorWithAlpha(evColor, 0.12),
+                  color: done ? '#888' : evColor,
+                }}>
+                  {done ? 'Done' : 'Active'}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
