@@ -34,6 +34,7 @@ const eventTypes = [
 ];
 
 const COMMUNITY_TYPE_IDS = ['fundraiser', 'potluck', 'gift', 'team', 'grad'];
+const APP_VERSION = '0.1.0';
 
 function newGuestId() {
   return 'g' + Math.random().toString(36).slice(2, 9);
@@ -165,6 +166,28 @@ function isoToDatetimeLocal(s) {
   if (isNaN(d.getTime())) return '';
   const pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function ProfileModal({ open, onClose }) {
+  if (!open) return null;
+
+  return (
+    <div style={DS.modalOverlay} onClick={onClose}>
+      <div style={DS.modal} onClick={e => e.stopPropagation()}>
+        <h3 style={{ margin: '0 0 16px', fontSize: '20px', fontWeight: 500 }}>Profile</h3>
+        <div style={{ ...DS.card, marginBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '14px', color: '#666' }}>Plan</span>
+            <span style={{ ...DS.pill, background: '#eeeae0', color: '#666', cursor: 'default' }}>Free</span>
+          </div>
+        </div>
+        <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#888', textAlign: 'center' }}>
+          Version {APP_VERSION}
+        </p>
+        <button style={{ ...DS.btn, ...DS.btnPrimary }} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
 }
 
 function FeedbackModal({ open, onClose, currentScreen, onAlert }) {
@@ -397,6 +420,9 @@ export default function Helmr() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -505,7 +531,7 @@ export default function Helmr() {
     return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
 
-  const resumeEvent = async (id) => {
+  const resumeEvent = async (id, initialTab = 'home') => {
     setLoading(true);
     try {
       const res = await fetch(`/api/events/${id}`);
@@ -559,6 +585,7 @@ export default function Helmr() {
         guestCount: guests.length,
         updatedAt: Date.now(),
       });
+      setTab(initialTab);
       setScreen('dashboard');
     } catch {
       await dlg.alert("Couldn't load event.");
@@ -704,13 +731,25 @@ export default function Helmr() {
     return { blocked: count >= 1 };
   };
 
-  const startNewEvent = async () => {
-    const { blocked } = checkEventLimit();
-    if (blocked) {
-      setUpgradeOpen(true);
+  const showToast = (message) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(message);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+  };
+
+  const openMostRecentEventTab = async (tabId) => {
+    const events = loadSavedEvents().map(normalizeSavedEvent).filter(Boolean);
+    if (events.length === 0) {
+      showToast('Create an event first');
       return;
     }
+    const tabMap = { guests: 'people', expenses: 'expenses', settings: 'extras' };
+    const targetTab = tabMap[tabId];
+    if (!targetTab) return;
+    await resumeEvent(events[0].id, targetTab);
+  };
 
+  const startNewEvent = async () => {
     setEventId(null);
     setEventType(null);
     setEventName('');
@@ -2006,19 +2045,50 @@ export default function Helmr() {
         <BottomNav
           activeTab={tab}
           isWelcome={screen === 'welcome'}
+          profileOpen={profileOpen}
+          onProfile={() => setProfileOpen(true)}
           onHome={() => setScreen('welcome')}
           onActivity={() => alert('Coming soon')}
           onTabChange={(tabId) => {
-            if (screen !== 'dashboard') return;
-            if (tabId === 'guests') setTab('people');
-            else if (tabId === 'expenses') setTab('expenses');
-            else if (tabId === 'settings') setTab('extras');
+            if (screen === 'welcome') {
+              if (tabId === 'guests' || tabId === 'expenses' || tabId === 'settings') {
+                openMostRecentEventTab(tabId);
+              }
+              return;
+            }
+            if (screen === 'dashboard') {
+              if (tabId === 'guests') setTab('people');
+              else if (tabId === 'expenses') setTab('expenses');
+              else if (tabId === 'settings') setTab('extras');
+            }
           }}
           onNewEvent={startNewEvent}
         />
       )}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '90px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#1a1a1a',
+          color: 'white',
+          padding: '10px 18px',
+          borderRadius: '999px',
+          fontSize: '13px',
+          fontWeight: 500,
+          zIndex: 160,
+          fontFamily: FONT,
+          maxWidth: 'calc(100% - 32px)',
+          textAlign: 'center',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        }}>
+          {toast}
+        </div>
+      )}
       <button style={DS.feedbackBtn} onClick={() => setFeedbackOpen(true)}>💬 Feedback</button>
       <AppDialog dialog={dialog} onClose={() => setDialog(null)} />
+      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <FeedbackModal
         open={feedbackOpen}
         onClose={() => setFeedbackOpen(false)}

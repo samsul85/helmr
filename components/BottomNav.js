@@ -4,26 +4,34 @@ import { BRAND, CARD_BORDER, FONT } from '@/lib/design';
 
 const NAV_ITEMS = [
   { id: 'home', label: 'Home', icon: 'ti-home' },
+  { id: 'profile', label: 'Profile', icon: 'ti-user' },
   { id: 'activity', label: 'Activity', icon: 'ti-chart-bar' },
   { id: 'guests', label: 'Guests', icon: 'ti-users' },
   { id: 'expenses', label: 'Expenses', icon: 'ti-receipt' },
   { id: 'settings', label: 'Settings', icon: 'ti-settings' },
 ];
 
-export default function BottomNav({ activeTab, isWelcome, onHome, onActivity, onTabChange, onNewEvent }) {
+export default function BottomNav({ activeTab, isWelcome, onHome, onProfile, onActivity, onTabChange, onNewEvent, profileOpen }) {
+  const leftItems = isWelcome
+    ? [NAV_ITEMS.find(i => i.id === 'profile'), NAV_ITEMS.find(i => i.id === 'activity')]
+    : NAV_ITEMS.filter(i => i.id === 'home' || i.id === 'activity');
+
   const renderItem = (item) => {
-    const isActive = item.id === 'home'
-      ? isWelcome
-      : item.id === 'activity'
+    const isActive = item.id === 'profile'
+      ? profileOpen
+      : item.id === 'home'
         ? false
-        : item.id === 'guests'
-          ? activeTab === 'people'
-          : item.id === 'settings'
-            ? activeTab === 'extras'
-            : activeTab === item.id;
+        : item.id === 'activity'
+          ? false
+          : item.id === 'guests'
+            ? activeTab === 'people'
+            : item.id === 'settings'
+              ? activeTab === 'extras'
+              : activeTab === item.id;
 
     const onClick = () => {
-      if (item.id === 'home') onHome();
+      if (item.id === 'profile') onProfile();
+      else if (item.id === 'home') onHome();
       else if (item.id === 'activity') onActivity();
       else onTabChange(item.id);
     };
@@ -69,7 +77,7 @@ export default function BottomNav({ activeTab, isWelcome, onHome, onActivity, on
       zIndex: 150,
       fontFamily: FONT,
     }}>
-      {NAV_ITEMS.slice(0, 2).map(renderItem)}
+      {leftItems.map(renderItem)}
 
       <button
         type="button"
@@ -97,7 +105,7 @@ export default function BottomNav({ activeTab, isWelcome, onHome, onActivity, on
         <i className="ti ti-plus" style={{ fontSize: '24px' }} />
       </button>
 
-      {NAV_ITEMS.slice(2).map(renderItem)}
+      {NAV_ITEMS.filter(i => i.id === 'guests' || i.id === 'expenses' || i.id === 'settings').map(renderItem)}
     </nav>
   );
 }
