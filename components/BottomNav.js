@@ -1,15 +1,52 @@
 'use client';
 
-import { BRAND, FONT } from '@/lib/design';
+import { BRAND, CARD_BORDER, FONT } from '@/lib/design';
 
 const NAV_ITEMS = [
-  { id: 'home', label: 'Home', icon: '🏠' },
-  { id: 'guests', label: 'Guests', icon: '👥' },
-  { id: 'expenses', label: 'Expenses', icon: '💰' },
-  { id: 'settings', label: 'Settings', icon: '⚙️' },
+  { id: 'home', label: 'Home', icon: 'ti-home' },
+  { id: 'activity', label: 'Activity', icon: 'ti-chart-bar' },
+  { id: 'guests', label: 'Guests', icon: 'ti-users' },
+  { id: 'expenses', label: 'Expenses', icon: 'ti-receipt' },
+  { id: 'settings', label: 'Settings', icon: 'ti-settings' },
 ];
 
-export default function BottomNav({ activeTab, onTabChange, onNewEvent }) {
+export default function BottomNav({ activeTab, onHome, onActivity, onTabChange, onNewEvent }) {
+  const renderItem = (item) => {
+    const isActive = item.id === 'home'
+      ? false
+      : item.id === 'activity'
+        ? activeTab === 'home'
+        : activeTab === item.id;
+
+    const onClick = () => {
+      if (item.id === 'home') onHome();
+      else if (item.id === 'activity') onActivity();
+      else onTabChange(item.id);
+    };
+
+    return (
+      <button
+        key={item.id}
+        type="button"
+        onClick={onClick}
+        style={{
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          padding: '4px 8px',
+          textAlign: 'center',
+          color: isActive ? BRAND : '#aaa',
+          fontFamily: FONT,
+          flex: 1,
+          minWidth: 0,
+        }}
+      >
+        <i className={`ti ${item.icon}`} style={{ fontSize: '20px', display: 'block', marginBottom: '2px' }} />
+        <div style={{ fontSize: '10px', fontWeight: isActive ? 600 : 400 }}>{item.label}</div>
+      </button>
+    );
+  };
+
   return (
     <nav style={{
       position: 'fixed',
@@ -19,35 +56,16 @@ export default function BottomNav({ activeTab, onTabChange, onNewEvent }) {
       width: '100%',
       maxWidth: '420px',
       background: 'white',
-      borderTop: '0.5px solid #e8e4d8',
+      borderTop: `0.5px solid ${CARD_BORDER}`,
       display: 'flex',
       alignItems: 'flex-end',
       justifyContent: 'space-around',
-      padding: '8px 12px 12px',
+      padding: '12px 8px 20px',
       boxSizing: 'border-box',
       zIndex: 150,
       fontFamily: FONT,
     }}>
-      {NAV_ITEMS.slice(0, 2).map(item => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={() => onTabChange(item.id)}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '4px 12px',
-            textAlign: 'center',
-            color: activeTab === item.id ? BRAND : '#888',
-            fontFamily: FONT,
-            flex: 1,
-          }}
-        >
-          <div style={{ fontSize: '20px', marginBottom: '2px' }}>{item.icon}</div>
-          <div style={{ fontSize: '10px', fontWeight: activeTab === item.id ? 600 : 400 }}>{item.label}</div>
-        </button>
-      ))}
+      {NAV_ITEMS.slice(0, 2).map(renderItem)}
 
       <button
         type="button"
@@ -63,34 +81,19 @@ export default function BottomNav({ activeTab, onTabChange, onNewEvent }) {
           fontSize: '28px',
           lineHeight: 1,
           cursor: 'pointer',
-          margin: '0 4px 4px',
+          marginTop: '-20px',
+          marginBottom: '4px',
           boxShadow: '0 4px 14px rgba(15,110,86,0.35)',
           flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        +
+        <i className="ti ti-plus" style={{ fontSize: '24px' }} />
       </button>
 
-      {NAV_ITEMS.slice(2).map(item => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={() => onTabChange(item.id)}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '4px 12px',
-            textAlign: 'center',
-            color: activeTab === item.id ? BRAND : '#888',
-            fontFamily: FONT,
-            flex: 1,
-          }}
-        >
-          <div style={{ fontSize: '20px', marginBottom: '2px' }}>{item.icon}</div>
-          <div style={{ fontSize: '10px', fontWeight: activeTab === item.id ? 600 : 400 }}>{item.label}</div>
-        </button>
-      ))}
+      {NAV_ITEMS.slice(2).map(renderItem)}
     </nav>
   );
 }
