@@ -392,9 +392,31 @@ export default function Helmr() {
   };
 
   const [savedEvents, setSavedEvents] = useState([]);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef(null);
   useEffect(() => {
     setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
   }, []);
+
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const onDocClick = (e) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [profileMenuOpen]);
+
+  const userPlan = 'Free';
+
+  const removeSavedEvent = async (ev) => {
+    if (await dlg.confirm(`Remove "${ev.name}" from this list? (The event itself isn't deleted.)`)) {
+      removeEventFromLocal(ev.id);
+      setSavedEvents(prev => prev.filter(x => x.id !== ev.id));
+    }
+  };
 
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   // Cost Split: organizer only counts as "confirmed" (and gets a share of the bill)
@@ -803,17 +825,81 @@ export default function Helmr() {
             zIndex: 1,
           }}>
             <img src="/logo.svg" alt="Helmr" style={{ width: '32px', height: '32px' }} />
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              border: `2px solid ${BRAND}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'white',
-            }}>
-              <i className="ti ti-user" style={{ fontSize: '20px', color: BRAND }} />
+            <div ref={profileMenuRef} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setProfileMenuOpen(open => !open)}
+                aria-label="Account menu"
+                aria-expanded={profileMenuOpen}
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  border: `2px solid ${BRAND}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'white',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                <i className="ti ti-user" style={{ fontSize: '20px', color: BRAND }} />
+              </button>
+              {profileMenuOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 8px)',
+                  right: 0,
+                  background: 'white',
+                  borderRadius: '12px',
+                  border: '0.5px solid #e8e4d8',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                  minWidth: '200px',
+                  overflow: 'hidden',
+                  zIndex: 20,
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '12px 14px',
+                    borderBottom: '0.5px solid #eee',
+                  }}>
+                    <span style={{ fontSize: '14px', fontWeight: 500, color: '#1a1a1a' }}>Account</span>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                      background: userPlan === 'Pro' ? '#e1f5ee' : '#eeeae0',
+                      color: userPlan === 'Pro' ? BRAND : '#666',
+                    }}>
+                      {userPlan}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setProfileMenuOpen(false);
+                      await dlg.alert('Sign out will be available when accounts are enabled.');
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '12px 14px',
+                      border: 'none',
+                      background: 'white',
+                      textAlign: 'left',
+                      fontSize: '14px',
+                      color: '#666',
+                      cursor: 'pointer',
+                      fontFamily: FONT,
+                    }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -930,17 +1016,38 @@ export default function Helmr() {
                   </div>
                 </div>
 
-                <span style={{
-                  fontSize: '11px',
-                  fontWeight: 500,
-                  padding: '4px 10px',
-                  borderRadius: '999px',
-                  flexShrink: 0,
-                  background: done ? '#eeeae0' : colorWithAlpha(evColor, 0.12),
-                  color: done ? '#888' : evColor,
-                }}>
-                  {done ? 'Done' : 'Active'}
-                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    background: done ? '#eeeae0' : colorWithAlpha(evColor, 0.12),
+                    color: done ? '#888' : evColor,
+                  }}>
+                    {done ? 'Done' : 'Active'}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${ev.name}`}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      padding: '2px',
+                      cursor: 'pointer',
+                      color: '#aaa',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeSavedEvent(ev);
+                    }}
+                  >
+                    <i className="ti ti-x" style={{ fontSize: '18px' }} />
+                  </button>
+                </div>
               </div>
             );
           })}
