@@ -67,9 +67,11 @@ function removeEventFromLocal(id) {
 }
 
 function normalizeSavedEvent(event) {
-  if (!event || !event.id) return null;
+  if (!event || typeof event !== 'object') return null;
+  const id = event.id || event.eventId;
+  if (!id) return null;
   return {
-    id: event.id,
+    id,
     name: event.name || event.eventName || 'Untitled event',
     eventType: event.eventType || 'other',
     mode: event.mode === 'open_pool' ? 'open_pool' : 'cost_split',
@@ -425,9 +427,20 @@ export default function Helmr() {
   };
 
   const [savedEvents, setSavedEvents] = useState([]);
+
+  const refreshSavedEvents = () => {
+    const events = loadSavedEvents().map(normalizeSavedEvent).filter(Boolean);
+    setSavedEvents(events);
+    return events;
+  };
+
   useEffect(() => {
-    setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
+    refreshSavedEvents();
   }, []);
+
+  useEffect(() => {
+    if (screen === 'welcome') refreshSavedEvents();
+  }, [screen]);
 
   const removeSavedEvent = async (ev) => {
     if (await dlg.confirm(`Remove "${ev.name}" from this list? (The event itself isn't deleted.)`)) {
@@ -802,8 +815,18 @@ export default function Helmr() {
   };
 
   const renderScreen = () => {
-    if (screen === 'welcome') return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '85vh' }}>
+    if (screen === 'welcome') {
+      const welcomeEvents = typeof window !== 'undefined'
+        ? loadSavedEvents().map(normalizeSavedEvent).filter(Boolean)
+        : savedEvents;
+      const activeEventCount = welcomeEvents.filter(ev => !isWelcomeEventDone(ev)).length;
+      const totalCollected = welcomeEvents.reduce(
+        (sum, ev) => sum + (ev.mode === 'open_pool' ? (ev.pooled || 0) : (ev.total || 0)),
+        0,
+      );
+
+      return (
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
         <div style={{
           background: TEAL_LIGHT,
           padding: '48px 24px 32px',
@@ -821,7 +844,7 @@ export default function Helmr() {
             Hey {organizerName || 'there'} 👋
           </p>
           <h1 style={{
-            margin: '0 0 28px',
+            margin: '0 0 20px',
             fontSize: '30px',
             color: TEXT_DARK,
             fontWeight: 500,
@@ -831,15 +854,44 @@ export default function Helmr() {
             Take the helm of your next group plan.
           </h1>
 
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+            <div style={{
+              background: 'white',
+              borderRadius: '18px',
+              border: `0.5px solid ${CARD_BORDER}`,
+              padding: '14px 16px',
+            }}>
+              <div style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>Active events</div>
+              <div style={{ fontSize: '26px', fontWeight: 500, color: TEXT_DARK, letterSpacing: '-0.02em' }}>
+                {activeEventCount}
+              </div>
+            </div>
+            <div style={{
+              background: 'white',
+              borderRadius: '18px',
+              border: `0.5px solid ${CARD_BORDER}`,
+              padding: '14px 16px',
+            }}>
+              <div style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>Total collected</div>
+              <div style={{ fontSize: '26px', fontWeight: 500, color: TEXT_DARK, letterSpacing: '-0.02em' }}>
+                ${totalCollected.toLocaleString()}
+              </div>
+            </div>
+          </div>
+
           <button style={{ ...DS.btn, ...DS.btnPrimary }} onClick={startNewEvent}>
             + Plan something new
           </button>
         </div>
 
-        <div style={{ flex: 1, background: CREAM, padding: '20px 16px' }}>
+        <div style={{ flex: 1, background: CREAM, padding: '20px 16px 24px' }}>
           <div style={DS.label}>Your events</div>
 
-          {savedEvents.map(ev => {
+          {welcomeEvents.length === 0 && (
+            <p style={{ fontSize: '13px', color: '#888', margin: '8px 0 0' }}>No saved events yet — plan something new to get started.</p>
+          )}
+
+          {welcomeEvents.map(ev => {
             const evColor = getEventColor(ev.eventType);
             const typeInfo = eventTypes.find(t => t.id === ev.eventType);
             const done = isWelcomeEventDone(ev);
@@ -926,7 +978,8 @@ export default function Helmr() {
           })}
         </div>
       </div>
-    );
+      );
+    }
 
     if (screen === 'chooseType') {
       const renderTypeGrid = (typeIds) => (
@@ -1948,7 +2001,7 @@ export default function Helmr() {
         {screen === 'dashboard' ? (
           <div style={DS.screenBody}>{renderScreen()}</div>
         ) : (
-          renderScreen()
+          <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>{renderScreen()}</div>
         )}
         {screen === 'dashboard' && (
           <BottomNav
