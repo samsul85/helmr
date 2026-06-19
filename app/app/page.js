@@ -10,6 +10,7 @@ import { BRAND, CREAM, DS, getEventColor, STATUS_STYLES, FONT, TEAL_LIGHT, TEXT_
 // ============ CONFIG ============
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mredzlyn';
 const LS_KEY = 'helmr.events.v1';
+const ORGANIZER_NAME_KEY = 'helmr.organizerName';
 const OWNER_ID = 'local-user';
 
 const eventTypes = [
@@ -48,6 +49,20 @@ function loadSavedEvents() {
     const arr = JSON.parse(raw);
     return Array.isArray(arr) ? arr : [];
   } catch { return []; }
+}
+
+function loadOrganizerNameFromLocal() {
+  if (typeof window === 'undefined') return '';
+  try {
+    return window.localStorage.getItem(ORGANIZER_NAME_KEY) || '';
+  } catch { return ''; }
+}
+
+function saveOrganizerNameToLocal(name) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(ORGANIZER_NAME_KEY, name);
+  } catch {}
 }
 
 function saveEventToLocal(entry) {
@@ -451,6 +466,7 @@ export default function Helmr() {
   };
 
   const [savedEvents, setSavedEvents] = useState([]);
+  const skipNextOrganizerNameSaveRef = useRef(false);
 
   const refreshSavedEvents = () => {
     const events = loadSavedEvents().map(normalizeSavedEvent).filter(Boolean);
@@ -460,7 +476,20 @@ export default function Helmr() {
 
   useEffect(() => {
     refreshSavedEvents();
+    const saved = loadOrganizerNameFromLocal();
+    if (saved) {
+      skipNextOrganizerNameSaveRef.current = true;
+      setOrganizerName(saved);
+    }
   }, []);
+
+  useEffect(() => {
+    if (skipNextOrganizerNameSaveRef.current) {
+      skipNextOrganizerNameSaveRef.current = false;
+      return;
+    }
+    saveOrganizerNameToLocal(organizerName);
+  }, [organizerName]);
 
   useEffect(() => {
     if (screen === 'welcome') refreshSavedEvents();
@@ -860,7 +889,7 @@ export default function Helmr() {
           </div>
 
           <p style={{ margin: '0 0 8px', fontSize: '15px', color: TEXT_DARK, fontWeight: 500 }}>
-            Hey {organizerName || 'there'} 👋
+            Hey {organizerName ? organizerName.charAt(0).toUpperCase() + organizerName.slice(1) : 'there'} 👋
           </p>
           <h1 style={{
             margin: '0 0 20px',
