@@ -1336,9 +1336,8 @@ export default function Helmr() {
                   )}
                 </div>
               );
-            })}
+            }            )}
 
-            <p style={{ fontSize: '11px', color: '#999', margin: '8px 16px 0', textAlign: 'center' }}>Event ID: {eventId}</p>
             {missingDeadline && (
               <div style={{ ...DS.card, margin: '12px 16px 0', borderColor: '#f0c595', background: '#fdf6ec' }}>
                 <div style={{ fontSize: '13px', color: '#7a5320', marginBottom: '4px' }}>⚠️ Set a response deadline before sharing.</div>
@@ -1373,8 +1372,8 @@ export default function Helmr() {
               </div>
               {goalNum > 0 && (
                 <>
-                  <div style={{ height: '8px', background: 'rgba(255,255,255,0.3)', borderRadius: '999px', marginTop: '14px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${fundedPct}%`, background: 'rgba(255,255,255,0.7)', borderRadius: '999px' }} />
+                  <div style={{ height: '6px', background: 'rgba(255,255,255,0.35)', borderRadius: '999px', marginTop: '14px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${fundedPct}%`, background: 'white', borderRadius: '999px' }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '13px', opacity: 0.9 }}>
                     <span>{fundedPct}% funded</span>
@@ -1487,7 +1486,6 @@ export default function Helmr() {
               );
             })}
 
-            <p style={{ fontSize: '11px', color: '#999', margin: '8px 16px 0', textAlign: 'center' }}>Event ID: {eventId}</p>
             {!organizerEmail && (
               <div style={{ ...DS.card, margin: '12px 16px 0', borderColor: '#f0c595', background: '#fdf6ec' }}>
                 <div style={{ fontSize: '13px', color: '#7a5320' }}>⚠️ Add your Interac email in the Settings tab so guests know where to send funds.</div>
@@ -2003,16 +2001,16 @@ export default function Helmr() {
         ) : (
           <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>{renderScreen()}</div>
         )}
-        {screen === 'dashboard' && (
-          <BottomNav
-            activeTab={tab}
-            onHome={() => setScreen('welcome')}
-            onActivity={() => setTab('home')}
-            onTabChange={setTab}
-            onNewEvent={startNewEvent}
-          />
-        )}
       </div>
+      {screen === 'dashboard' && (
+        <BottomNav
+          activeTab={tab}
+          onHome={() => setScreen('welcome')}
+          onActivity={() => setTab('home')}
+          onTabChange={setTab}
+          onNewEvent={startNewEvent}
+        />
+      )}
       <button style={DS.feedbackBtn} onClick={() => setFeedbackOpen(true)}>💬 Feedback</button>
       <AppDialog dialog={dialog} onClose={() => setDialog(null)} />
       <FeedbackModal
