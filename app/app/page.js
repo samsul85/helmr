@@ -421,8 +421,6 @@ export default function Helmr() {
   const [shareOpen, setShareOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [toast, setToast] = useState(null);
-  const toastTimerRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -729,24 +727,6 @@ export default function Helmr() {
   const checkEventLimit = () => {
     const count = loadSavedEvents().length;
     return { blocked: count >= 1 };
-  };
-
-  const showToast = (message) => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast(message);
-    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
-  };
-
-  const openMostRecentEventTab = async (tabId) => {
-    const events = loadSavedEvents().map(normalizeSavedEvent).filter(Boolean);
-    if (events.length === 0) {
-      showToast('Create an event first');
-      return;
-    }
-    const tabMap = { guests: 'people', expenses: 'expenses', settings: 'extras' };
-    const targetTab = tabMap[tabId];
-    if (!targetTab) return;
-    await resumeEvent(events[0].id, targetTab);
   };
 
   const startNewEvent = async () => {
@@ -2050,41 +2030,13 @@ export default function Helmr() {
           onHome={() => setScreen('welcome')}
           onActivity={() => alert('Coming soon')}
           onTabChange={(tabId) => {
-            if (screen === 'welcome') {
-              if (tabId === 'guests' || tabId === 'expenses' || tabId === 'settings') {
-                openMostRecentEventTab(tabId);
-              }
-              return;
-            }
-            if (screen === 'dashboard') {
-              if (tabId === 'guests') setTab('people');
-              else if (tabId === 'expenses') setTab('expenses');
-              else if (tabId === 'settings') setTab('extras');
-            }
+            if (screen !== 'dashboard') return;
+            if (tabId === 'guests') setTab('people');
+            else if (tabId === 'expenses') setTab('expenses');
+            else if (tabId === 'settings') setTab('extras');
           }}
           onNewEvent={startNewEvent}
         />
-      )}
-      {toast && (
-        <div style={{
-          position: 'fixed',
-          bottom: '90px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: '#1a1a1a',
-          color: 'white',
-          padding: '10px 18px',
-          borderRadius: '999px',
-          fontSize: '13px',
-          fontWeight: 500,
-          zIndex: 160,
-          fontFamily: FONT,
-          maxWidth: 'calc(100% - 32px)',
-          textAlign: 'center',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-        }}>
-          {toast}
-        </div>
       )}
       <button style={DS.feedbackBtn} onClick={() => setFeedbackOpen(true)}>💬 Feedback</button>
       <AppDialog dialog={dialog} onClose={() => setDialog(null)} />
