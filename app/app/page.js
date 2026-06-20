@@ -2176,7 +2176,10 @@ export default function Helmr() {
             </div>
 
             <div style={{ ...DS.card, marginBottom: '10px' }}>
-              <div style={{ fontWeight: 500, marginBottom: '8px' }}>📝 Event details</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, marginBottom: '8px' }}>
+                <i className="ti ti-file-text" style={{ fontSize: '18px', color: BRAND }} />
+                <span>Event details</span>
+              </div>
 
               <label style={DS.label}>Event name</label>
               <input style={{ ...DS.input, marginBottom: '10px' }} value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. Layla's 30th" />
@@ -2217,7 +2220,10 @@ export default function Helmr() {
 
             {mode === 'open_pool' && (
               <div style={{ ...DS.card, marginBottom: '10px' }}>
-                <div style={{ fontWeight: 500, marginBottom: '8px' }}>💵 Pool settings</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, marginBottom: '8px' }}>
+                  <i className="ti ti-coin" style={{ fontSize: '18px', color: BRAND }} />
+                  <span>Pool settings</span>
+                </div>
 
                 <label style={DS.label}>Suggested contribution (optional)</label>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
@@ -2244,12 +2250,18 @@ export default function Helmr() {
             )}
 
             <div style={{ ...DS.card, marginBottom: '10px' }}>
-              <div style={{ fontWeight: 500, marginBottom: '4px' }}>💸 Your Interac email</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, marginBottom: '4px' }}>
+                <i className="ti ti-mail" style={{ fontSize: '18px', color: BRAND }} />
+                <span>Your Interac email</span>
+              </div>
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Where guests send their share</p>
               <input style={DS.input} type="email" placeholder="you@example.com" value={organizerEmail} onChange={e => setOrganizerEmail(e.target.value)} />
             </div>
             <div style={{ ...DS.card, marginBottom: '10px' }}>
-              <div style={{ fontWeight: 500, marginBottom: '4px' }}>🔔 Email notifications</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, marginBottom: '4px' }}>
+                <i className="ti ti-bell" style={{ fontSize: '18px', color: BRAND }} />
+                <span>Email notifications</span>
+              </div>
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px' }}>
                 Choose when Helmr emails you about guest activity.
               </p>
@@ -2294,7 +2306,10 @@ export default function Helmr() {
             <div style={{ ...DS.card, marginBottom: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 500, marginBottom: '4px' }}>🎩 Tip the planner</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, marginBottom: '4px' }}>
+                    <i className="ti ti-heart-handshake" style={{ fontSize: '18px', color: BRAND }} />
+                    <span>Tip the planner</span>
+                  </div>
                   <p style={{ fontSize: '12px', color: '#777', margin: 0 }}>
                     Show guests an optional tip prompt when they opt in. Defaults to $0 — no pressure.
                   </p>
@@ -2322,7 +2337,10 @@ export default function Helmr() {
               })()}
             </div>
             <div style={{ ...DS.card, marginBottom: '10px' }}>
-              <div style={{ fontWeight: 500, marginBottom: '4px' }}>🎁 Surprise gift</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, marginBottom: '4px' }}>
+                <i className="ti ti-gift" style={{ fontSize: '18px', color: BRAND }} />
+                <span>Surprise gift</span>
+              </div>
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Propose a gift; requires organizer approval</p>
               <button style={DS.btn} onClick={async () => { await dlg.alert('Surprise gift flow — propose a gift, organizer approves before it shows up to other guests.'); }}>+ Propose surprise gift</button>
             </div>
@@ -2398,7 +2416,7 @@ export default function Helmr() {
           profileOpen={profileOpen}
           onProfile={() => setProfileOpen(true)}
           onHome={() => navigateToScreen('welcome', 'back')}
-          onActivity={() => alert('Coming soon')}
+          onActivity={() => dlg.alert('Coming soon — activity feed')}
           onTabChange={(tabId) => {
             if (screen !== 'dashboard') return;
             if (tabId === 'guests') setTab('people');

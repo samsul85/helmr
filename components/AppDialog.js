@@ -1,7 +1,54 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BRAND, DS, FONT } from '@/lib/design';
+import { BRAND, CARD_BORDER, DS, FONT } from '@/lib/design';
+
+const overlayStyle = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.55)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '20px',
+  zIndex: 400,
+  fontFamily: FONT,
+};
+
+const cardStyle = {
+  background: 'white',
+  borderRadius: '20px',
+  padding: '24px',
+  maxWidth: '320px',
+  width: '100%',
+  boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+};
+
+const btnPrimary = {
+  flex: 1,
+  padding: '14px 16px',
+  borderRadius: '999px',
+  border: 'none',
+  background: BRAND,
+  color: 'white',
+  fontSize: '15px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontFamily: FONT,
+};
+
+const btnCancel = {
+  flex: 1,
+  padding: '14px 16px',
+  borderRadius: '999px',
+  border: `0.5px solid ${CARD_BORDER}`,
+  background: 'white',
+  color: '#666',
+  fontSize: '15px',
+  fontWeight: 500,
+  cursor: 'pointer',
+  fontFamily: FONT,
+};
 
 export default function AppDialog({ dialog, onClose }) {
   const [promptValue, setPromptValue] = useState('');
@@ -28,15 +75,24 @@ export default function AppDialog({ dialog, onClose }) {
     onClose();
   };
 
+  const confirmLabel = dialog.confirmLabel || (
+    dialog.type === 'alert' ? 'OK' : dialog.type === 'prompt' ? 'Add' : 'Confirm'
+  );
+
+  const isSingleButton = dialog.type === 'alert';
+
   return (
-    <div style={DS.modalOverlay} onClick={dialog.type === 'alert' ? handleConfirm : handleCancel}>
-      <div style={DS.modal} onClick={e => e.stopPropagation()}>
+    <div
+      style={overlayStyle}
+      onClick={isSingleButton ? handleConfirm : handleCancel}
+    >
+      <div style={cardStyle} onClick={e => e.stopPropagation()}>
         {dialog.title && (
-          <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 500, fontFamily: FONT }}>
+          <h3 style={{ margin: '0 0 8px', fontSize: '16px', fontWeight: 600, fontFamily: FONT, color: '#1a1a1a' }}>
             {dialog.title}
           </h3>
         )}
-        <p style={{ margin: '0 0 16px', color: '#555', fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+        <p style={{ margin: '0 0 16px', color: '#666', fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
           {dialog.message}
         </p>
 
@@ -45,23 +101,24 @@ export default function AppDialog({ dialog, onClose }) {
             autoFocus
             value={promptValue}
             onChange={e => setPromptValue(e.target.value)}
+            placeholder={dialog.placeholder || ''}
             style={{ ...DS.input, marginBottom: '16px' }}
             onKeyDown={e => { if (e.key === 'Enter') handleConfirm(); }}
           />
         )}
 
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {dialog.type !== 'alert' && (
-            <button type="button" style={{ ...DS.btn, flex: 1 }} onClick={handleCancel}>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {!isSingleButton && (
+            <button type="button" style={btnCancel} onClick={handleCancel}>
               Cancel
             </button>
           )}
           <button
             type="button"
-            style={{ ...DS.btn, ...DS.btnPrimary, flex: 1, border: 'none' }}
+            style={{ ...btnPrimary, ...(isSingleButton ? { width: '100%', flex: undefined } : {}) }}
             onClick={handleConfirm}
           >
-            {dialog.confirmLabel || (dialog.type === 'alert' ? 'OK' : 'Confirm')}
+            {confirmLabel}
           </button>
         </div>
       </div>
@@ -94,6 +151,7 @@ export function createDialogHelpers(setDialog) {
         title,
         message,
         defaultValue,
+        confirmLabel: 'Add',
         onConfirm: (value) => resolve(value),
         onCancel: () => resolve(null),
       });
