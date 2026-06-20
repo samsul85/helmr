@@ -116,6 +116,11 @@ function deadlineCountdownLabel(deadlineDate, deadlinePassed) {
   return `${days} days remaining`;
 }
 
+function capitalizeName(name) {
+  if (!name) return '';
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
 // Per-event localStorage key for broadcast self-signups
 const lsBroadcastKey = (eventId) => `helmr.broadcast.${eventId}`;
 
@@ -658,7 +663,8 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
 
     const poolPct = goal > 0 ? Math.min(100, (pooledTotal / goal) * 100) : 0;
     const countdownLabel = deadlineCountdownLabel(deadlineDate, deadlinePassed);
-    const paymentTotal = (hasPledged ? pledged : 0) + guestTip;
+    const poolPaymentReady = (hasPledged && pledged > 0) || (confirmedSelf && Number(pledged) > 0);
+    const poolPaymentTotal = (poolPaymentReady ? Number(pledged) : 0) + guestTip;
 
     return (
       <div style={S.page}>
@@ -676,7 +682,7 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
             </h1>
             {event.organizerName && (
               <p style={{ fontSize: '14px', color: '#666', margin: 0 }}>
-                Organized by {event.organizerName}
+                Organized by {capitalizeName(event.organizerName)}
               </p>
             )}
             {initialGuest && !isBroadcastFirstTime && (
@@ -806,7 +812,7 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
                     <span>Tip</span><span>${guestTip.toLocaleString()}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 600, color: BRAND }}>
-                    <span>Total due</span><span>${paymentTotal.toLocaleString()}</span>
+                    <span>Total due</span><span>${poolPaymentTotal.toLocaleString()}</span>
                   </div>
                 </div>
               )}
@@ -851,11 +857,11 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
             </div>
           )}
 
-          {hasPledged && pledged > 0 && renderTipCard()}
+          {poolPaymentReady && renderCopyableEmail(`$${poolPaymentTotal.toLocaleString()}`)}
 
-          {hasPledged && pledged > 0 && renderCopyableEmail(`$${paymentTotal.toLocaleString()}`)}
+          {poolPaymentReady && renderTipCard()}
 
-          {hasPledged && pledged > 0 && renderScreenshotUpload()}
+          {poolPaymentReady && renderScreenshotUpload()}
 
           {(event.expenses || []).some(e => Number(e.amount) > 0 || e.name) && (
             <div style={S.card}>
@@ -902,7 +908,7 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
           </h1>
           {event.organizerName && (
             <p style={{ fontSize: '14px', color: '#666', margin: 0 }}>
-              Organized by {event.organizerName}
+              Organized by {capitalizeName(event.organizerName)}
             </p>
           )}
           {initialGuest && (

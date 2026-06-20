@@ -298,6 +298,76 @@ function ShareModal({ open, onClose, event }) {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   const eventBase = `${baseUrl}/e/${event.id}`;
   const inviteMode = event.inviteMode || 'personal';
+  const eventTitle = event.eventName || 'Your event';
+
+  const overlay = {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.55)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '20px',
+    zIndex: 300,
+    fontFamily: FONT,
+  };
+  const card = {
+    background: 'white',
+    borderRadius: '20px',
+    padding: '24px',
+    maxWidth: '420px',
+    width: '100%',
+    maxHeight: '85vh',
+    overflow: 'auto',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+  };
+  const copyField = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    background: TEAL_LIGHT,
+    border: `1.5px solid ${BRAND}`,
+    borderRadius: '14px',
+    padding: '12px 14px',
+    marginBottom: '14px',
+  };
+  const pillPrimary = {
+    width: '100%',
+    padding: '14px 16px',
+    borderRadius: '999px',
+    border: 'none',
+    background: BRAND,
+    color: 'white',
+    cursor: 'pointer',
+    fontSize: '15px',
+    fontWeight: 600,
+    fontFamily: FONT,
+    textAlign: 'center',
+    textDecoration: 'none',
+    display: 'block',
+    boxSizing: 'border-box',
+  };
+  const pillOutline = {
+    width: '100%',
+    padding: '14px 16px',
+    borderRadius: '999px',
+    border: `0.5px solid ${CARD_BORDER}`,
+    background: 'white',
+    color: '#1a1a1a',
+    cursor: 'pointer',
+    fontSize: '15px',
+    fontWeight: 500,
+    fontFamily: FONT,
+    textAlign: 'center',
+    textDecoration: 'none',
+    display: 'block',
+    boxSizing: 'border-box',
+  };
+  const pillGhost = {
+    ...pillOutline,
+    background: CREAM,
+    color: '#666',
+  };
 
   const copy = async (text, id) => {
     try {
@@ -314,114 +384,122 @@ function ShareModal({ open, onClose, event }) {
     }
   };
 
-  // ============================================================
-  // BROADCAST MODE — one shared link
-  // ============================================================
   if (inviteMode === 'broadcast') {
     const verb = event.mode === 'open_pool' ? 'chip in' : 'join';
-    const ename = event.eventName || 'our event';
-    const msg = `You're invited to ${verb} for ${ename}. ${eventBase}`;
+    const msg = `You're invited to ${verb} for ${eventTitle}. ${eventBase}`;
     const waUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`;
     const smsUrl = `sms:?&body=${encodeURIComponent(msg)}`;
 
     return (
-      <div style={DS.modalOverlay} onClick={onClose}>
-        <div style={{ ...DS.modal, maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
-          <h3 style={{ margin: '0 0 4px' }}>Share the link</h3>
-          <p style={{ margin: '0 0 16px', color: '#666', fontSize: '13px' }}>
+      <div style={overlay} onClick={onClose}>
+        <div style={card} onClick={e => e.stopPropagation()}>
+          <h2 style={{ margin: '0 0 6px', fontSize: '20px', fontWeight: 700, color: '#1a1a1a' }}>
+            {eventTitle}
+          </h2>
+          <p style={{ margin: '0 0 18px', color: '#888', fontSize: '13px' }}>
             Post this in your group chat. Anyone with the link can join.
           </p>
 
-          <div style={{ marginBottom: '14px', padding: '12px', background: '#f5f3ee', borderRadius: '10px' }}>
-            <div style={{ fontFamily: 'monospace', fontSize: '13px', wordBreak: 'break-all', marginBottom: '10px' }}>{eventBase}</div>
-            <button style={{ ...DS.btn, ...DS.btnPrimary }} onClick={() => copy(eventBase, 'link')}>
-              {copiedId === 'link' ? '✓ Copied' : 'Copy link'}
+          <div style={copyField}>
+            <span style={{ flex: 1, color: BRAND, fontWeight: 600, fontSize: '13px', wordBreak: 'break-all' }}>
+              {eventBase}
+            </span>
+            <button
+              type="button"
+              onClick={() => copy(eventBase, 'link')}
+              aria-label="Copy link"
+              style={{
+                background: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '8px 10px',
+                cursor: 'pointer',
+                color: BRAND,
+                flexShrink: 0,
+              }}
+            >
+              <i className={`ti ${copiedId === 'link' ? 'ti-check' : 'ti-copy'}`} style={{ fontSize: '18px' }} />
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-            <a href={waUrl} target="_blank" rel="noopener noreferrer" style={{ ...DS.btn, textDecoration: 'none', textAlign: 'center', color: '#1a1a1a', display: 'block' }}>
-              💬 WhatsApp
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+            <a href={waUrl} target="_blank" rel="noopener noreferrer" style={pillOutline}>
+              WhatsApp
             </a>
-            <a href={smsUrl} style={{ ...DS.btn, textDecoration: 'none', textAlign: 'center', color: '#1a1a1a', display: 'block' }}>
-              📱 SMS
+            <a href={smsUrl} style={pillOutline}>
+              SMS
             </a>
           </div>
-          <button style={{ ...DS.btn, marginBottom: '8px' }} onClick={() => copy(msg, 'msg')}>
-            {copiedId === 'msg' ? '✓ Copied' : 'Copy invite message'}
+
+          <button type="button" style={{ ...pillOutline, marginBottom: '10px' }} onClick={() => copy(msg, 'msg')}>
+            {copiedId === 'msg' ? '✓ Message copied' : 'Copy invite message'}
           </button>
 
-          <button
-            style={{ ...DS.btn, marginBottom: '8px' }}
-            onClick={() => window.open(`${eventBase}?preview=1`, '_blank', 'noopener')}
-          >
-            👁 Preview as guest
-          </button>
-
-          <p style={{ fontSize: '11px', color: '#999', textAlign: 'center', margin: '12px 0' }}>
-            You'll see contributors show up on your dashboard as they pledge.
-          </p>
-
-          <button style={DS.btn} onClick={onClose}>Done</button>
+          <button type="button" style={pillPrimary} onClick={onClose}>Done</button>
         </div>
       </div>
     );
   }
 
-  // ============================================================
-  // PERSONAL MODE — per-guest links
-  // ============================================================
   return (
-    <div style={DS.modalOverlay} onClick={onClose}>
-      <div style={{ ...DS.modal, maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
-        <h3 style={{ margin: '0 0 4px' }}>Share invite links</h3>
-        <p style={{ margin: '0 0 16px', color: '#666', fontSize: '13px' }}>Send each person their own link. You'll see when they view it and RSVP.</p>
-
-        <div style={{ marginBottom: '14px', padding: '10px 12px', background: '#f5f3ee', borderRadius: '10px' }}>
-          <div style={{ fontSize: '11px', color: '#777', marginBottom: '4px' }}>General link (anyone)</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ flex: 1, fontFamily: 'monospace', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{eventBase}</div>
-            <button style={{ ...DS.btn, width: 'auto', padding: '6px 10px', fontSize: '12px' }} onClick={() => copy(eventBase, 'general')}>
-              {copiedId === 'general' ? '✓' : 'Copy'}
-            </button>
-          </div>
-        </div>
+    <div style={overlay} onClick={onClose}>
+      <div style={card} onClick={e => e.stopPropagation()}>
+        <h2 style={{ margin: '0 0 6px', fontSize: '20px', fontWeight: 700, color: '#1a1a1a' }}>
+          {eventTitle}
+        </h2>
+        <p style={{ margin: '0 0 18px', color: '#888', fontSize: '13px' }}>
+          Send each person their own link. You&apos;ll see when they view it and RSVP.
+        </p>
 
         {guests.length === 0 && (
-          <p style={{ fontSize: '13px', color: '#999', textAlign: 'center', padding: '20px 0' }}>
+          <p style={{ fontSize: '14px', color: '#999', textAlign: 'center', padding: '16px 0' }}>
             Add people on the Guests tab to get personal links.
           </p>
         )}
 
         {guests.map(g => {
           const link = `${eventBase}?g=${g.id}`;
+          const statusStyle = STATUS_STYLES[g.status] || { bg: '#eeeae0', fg: '#666' };
           return (
-            <div key={g.id} style={{ ...DS.card, marginBottom: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <div style={{ fontSize: '14px', fontWeight: 500 }}>{g.name}</div>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  {g.viewedAt && <span style={{ fontSize: '10px', color: '#085041', background: '#e1f5ee', padding: '2px 8px', borderRadius: '999px' }}>viewed</span>}
-                  {g.status && g.status !== 'invited' && <span style={{ fontSize: '10px', color: STATUS_STYLES[g.status]?.fg, background: STATUS_STYLES[g.status]?.bg, padding: '2px 8px', borderRadius: '999px' }}>{g.status}</span>}
+            <div
+              key={g.id}
+              style={{
+                background: 'white',
+                border: `0.5px solid ${CARD_BORDER}`,
+                borderRadius: '18px',
+                padding: '14px 16px',
+                marginBottom: '10px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '8px' }}>
+                <div style={{ fontSize: '15px', fontWeight: 600, color: '#1a1a1a' }}>{g.name}</div>
+                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  {g.viewedAt && (
+                    <span style={{ fontSize: '11px', fontWeight: 500, color: BRAND, background: TEAL_LIGHT, padding: '4px 10px', borderRadius: '999px' }}>
+                      viewed
+                    </span>
+                  )}
+                  {g.status && g.status !== 'invited' && (
+                    <span style={{ fontSize: '11px', fontWeight: 500, color: statusStyle.fg, background: statusStyle.bg, padding: '4px 10px', borderRadius: '999px' }}>
+                      {g.status}
+                    </span>
+                  )}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ flex: 1, fontFamily: 'monospace', fontSize: '11px', color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link}</div>
-                <button style={{ ...DS.btn, width: 'auto', padding: '6px 10px', fontSize: '12px' }} onClick={() => copy(link, g.id)}>
-                  {copiedId === g.id ? '✓' : 'Copy'}
-                </button>
-              </div>
+              <button
+                type="button"
+                style={{ ...pillOutline, width: '100%', fontSize: '14px', padding: '12px 16px' }}
+                onClick={() => copy(link, g.id)}
+              >
+                {copiedId === g.id ? '✓ Link copied' : 'Copy link'}
+              </button>
             </div>
           );
         })}
 
-        <button
-          style={{ ...DS.btn, marginTop: '8px' }}
-          onClick={() => window.open(`${eventBase}?preview=1`, '_blank', 'noopener')}
-        >
-          👁 Preview as guest (general link)
+        <button type="button" style={{ ...pillPrimary, marginTop: guests.length ? '4px' : 0 }} onClick={onClose}>
+          Done
         </button>
-
-        <button style={{ ...DS.btn, marginTop: '8px' }} onClick={onClose}>Done</button>
       </div>
     </div>
   );
