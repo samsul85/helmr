@@ -3,15 +3,118 @@
 import { useEffect, useRef, useState } from 'react';
 import { computePersonShare, participantsForExpense } from '../../../lib/shares';
 
+const BRAND = '#0F6E56';
+const CREAM = '#F5F3EE';
+const TEAL_LIGHT = '#E1F5EE';
+const CARD_BORDER = '#e8e4d8';
+const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
 const S = {
-  page: { minHeight: '100vh', background: '#f5f3ee', padding: '12px', boxSizing: 'border-box' },
-  frame: { maxWidth: '420px', margin: '0 auto', background: 'white', borderRadius: '20px', minHeight: '85vh', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.06)' },
-  btn: { width: '100%', padding: '14px', borderRadius: '10px', border: '0.5px solid #ccc', background: 'white', cursor: 'pointer', fontSize: '15px', fontWeight: 500, fontFamily: 'inherit' },
-  btnPrimary: { background: '#1a1a1a', color: 'white', border: 'none' },
-  card: { background: 'white', border: '0.5px solid #eee', borderRadius: '12px', padding: '14px', marginBottom: '10px' },
-  label: { fontSize: '12px', color: '#777', marginBottom: '4px', display: 'block' },
-  input: { width: '100%', padding: '12px', borderRadius: '10px', border: '0.5px solid #ddd', fontSize: '15px', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' },
+  page: { minHeight: '100vh', background: CREAM, padding: '12px', boxSizing: 'border-box', fontFamily: FONT },
+  shell: { maxWidth: '420px', margin: '0 auto' },
+  card: {
+    background: 'white',
+    border: `0.5px solid ${CARD_BORDER}`,
+    borderRadius: '18px',
+    padding: '18px',
+    marginBottom: '12px',
+  },
+  label: { fontSize: '12px', color: '#888', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 },
+  input: { width: '100%', padding: '14px 18px', borderRadius: '999px', border: '0.5px solid #ddd', fontSize: '15px', fontFamily: FONT, boxSizing: 'border-box', outline: 'none', background: 'white' },
+  shareAmount: { fontSize: '42px', fontWeight: 600, color: BRAND, letterSpacing: '-0.02em', lineHeight: 1.1, margin: '4px 0 12px' },
+  deadlinePill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '13px',
+    fontWeight: 500,
+    color: BRAND,
+    background: TEAL_LIGHT,
+    padding: '6px 12px',
+    borderRadius: '999px',
+  },
+  btnIn: {
+    width: '100%',
+    padding: '16px',
+    borderRadius: '999px',
+    border: 'none',
+    background: BRAND,
+    color: 'white',
+    cursor: 'pointer',
+    fontSize: '16px',
+    fontWeight: 600,
+    fontFamily: FONT,
+    marginBottom: '10px',
+  },
+  btnInActive: {
+    background: BRAND,
+    color: 'white',
+    boxShadow: '0 4px 14px rgba(15,110,86,0.3)',
+  },
+  btnOut: {
+    width: '100%',
+    padding: '16px',
+    borderRadius: '999px',
+    border: `1.5px solid ${CARD_BORDER}`,
+    background: 'white',
+    color: '#666',
+    cursor: 'pointer',
+    fontSize: '16px',
+    fontWeight: 500,
+    fontFamily: FONT,
+    marginBottom: '16px',
+  },
+  btnOutActive: {
+    borderColor: '#ccc',
+    color: '#888',
+    background: '#f5f3ee',
+  },
+  btnUpload: {
+    width: '100%',
+    padding: '14px',
+    borderRadius: '999px',
+    border: `1.5px dashed ${BRAND}`,
+    background: TEAL_LIGHT,
+    color: BRAND,
+    cursor: 'pointer',
+    fontSize: '15px',
+    fontWeight: 500,
+    fontFamily: FONT,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    marginBottom: '12px',
+  },
+  btn: { width: '100%', padding: '14px', borderRadius: '999px', border: `0.5px solid ${CARD_BORDER}`, background: 'white', cursor: 'pointer', fontSize: '15px', fontWeight: 500, fontFamily: FONT },
+  btnPrimary: { background: BRAND, color: 'white', border: 'none' },
+  copyField: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    background: TEAL_LIGHT,
+    border: `1.5px solid ${BRAND}`,
+    borderRadius: '14px',
+    padding: '12px 14px',
+    marginTop: '8px',
+  },
 };
+
+function daysRemaining(deadlineDate) {
+  if (!deadlineDate || isNaN(deadlineDate.getTime())) return null;
+  const diff = deadlineDate.getTime() - Date.now();
+  if (diff <= 0) return 0;
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+function deadlineCountdownLabel(deadlineDate, deadlinePassed) {
+  if (!deadlineDate || isNaN(deadlineDate.getTime())) return null;
+  if (deadlinePassed) return 'RSVP deadline has passed';
+  const days = daysRemaining(deadlineDate);
+  if (days === 0) return 'Last day to respond';
+  if (days === 1) return '1 day remaining';
+  return `${days} days remaining`;
+}
 
 // Per-event localStorage key for broadcast self-signups
 const lsBroadcastKey = (eventId) => `helmr.broadcast.${eventId}`;
@@ -80,6 +183,7 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
   const [screenshotCacheBust, setScreenshotCacheBust] = useState(0);
   const screenshotInputRef = useRef(null);
+  const [emailCopied, setEmailCopied] = useState(false);
 
   // Planner tip — voluntary add-on, only if organizer enabled tipping.
   const tipsEnabled = !!event.tipsEnabled;
@@ -339,33 +443,94 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
   const declined = status === 'declined';
   const confirmedSelf = status === 'confirmed' || status === 'paid';
 
-  // Renders the upload card. Same UI in both open-pool and cost-split views.
-  // Only shown after the guest has at least committed (pledged or RSVPed yes).
-  const renderScreenshotCard = () => {
+  const copyOrganizerEmail = async () => {
+    if (!organizerEmail) return;
+    try {
+      await navigator.clipboard.writeText(organizerEmail);
+      setEmailCopied(true);
+      setTimeout(() => setEmailCopied(false), 2000);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = organizerEmail;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        setEmailCopied(true);
+        setTimeout(() => setEmailCopied(false), 2000);
+      } catch {}
+      document.body.removeChild(ta);
+    }
+  };
+
+  const renderCopyableEmail = (amountLabel) => (
+    <div style={S.card}>
+      <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '4px' }}>Interac e-Transfer</div>
+      {amountLabel && (
+        <p style={{ fontSize: '13px', color: '#666', margin: '0 0 4px' }}>
+          Send <strong style={{ color: BRAND }}>{amountLabel}</strong> via Interac e-Transfer
+        </p>
+      )}
+      {organizerEmail ? (
+        <>
+          <p style={{ fontSize: '12px', color: '#888', margin: '0 0 2px' }}>Transfer to</p>
+          <div style={S.copyField}>
+            <span style={{ flex: 1, color: BRAND, fontWeight: 600, fontSize: '14px', wordBreak: 'break-all' }}>
+              {organizerEmail}
+            </span>
+            <button
+              type="button"
+              onClick={copyOrganizerEmail}
+              aria-label="Copy email"
+              style={{
+                background: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '8px 10px',
+                cursor: 'pointer',
+                color: BRAND,
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <i className={`ti ${emailCopied ? 'ti-check' : 'ti-copy'}`} style={{ fontSize: '18px' }} />
+            </button>
+          </div>
+          {emailCopied && (
+            <p style={{ fontSize: '12px', color: BRAND, margin: '6px 0 0', fontWeight: 500 }}>Copied!</p>
+          )}
+          <p style={{ fontSize: '11px', color: '#999', margin: '8px 0 0' }}>
+            Include event code: {event.id.toUpperCase()}
+          </p>
+        </>
+      ) : (
+        <p style={{ fontSize: '13px', color: '#E8645A', margin: 0 }}>
+          The organizer hasn&apos;t added their Interac email yet. Contact them directly.
+        </p>
+      )}
+    </div>
+  );
+
+  const renderScreenshotUpload = () => {
     if (!guestId) return null;
     const hasScreenshot = !!screenshotUploadedAt;
     const previewUrl = hasScreenshot
       ? `/api/events/${event.id}/screenshot?guestId=${guestId}&v=${screenshotCacheBust}`
       : null;
     return (
-      <div style={S.card}>
-        <div style={{ fontWeight: 500, marginBottom: '4px' }}>📸 Proof of e-Transfer (optional)</div>
-        <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px' }}>
-          {hasScreenshot
-            ? 'Uploaded. Organizer will see this on their dashboard.'
-            : "After you send your e-Transfer, upload a screenshot so the organizer knows it's coming."}
-        </p>
-
+      <>
         {previewUrl && (
-          <a href={previewUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginBottom: '10px' }}>
-            <img
-              src={previewUrl}
-              alt="Your e-Transfer screenshot"
-              style={{ width: '100%', borderRadius: '8px', border: '0.5px solid #eee', display: 'block' }}
-            />
-          </a>
+          <div style={{ ...S.card, padding: '12px' }}>
+            <a href={previewUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+              <img
+                src={previewUrl}
+                alt="Your e-Transfer screenshot"
+                style={{ width: '100%', borderRadius: '12px', border: `0.5px solid ${CARD_BORDER}`, display: 'block' }}
+              />
+            </a>
+          </div>
         )}
-
         <input
           ref={screenshotInputRef}
           type="file"
@@ -374,19 +539,21 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
           onChange={(e) => {
             const f = e.target.files && e.target.files[0];
             if (f) uploadScreenshot(f);
-            e.target.value = ''; // allow re-selecting same file
+            e.target.value = '';
           }}
         />
         <button
-          style={{ ...S.btn, opacity: uploadingScreenshot ? 0.6 : 1 }}
+          type="button"
+          style={{ ...S.btnUpload, opacity: uploadingScreenshot ? 0.6 : 1 }}
           disabled={uploadingScreenshot}
           onClick={() => screenshotInputRef.current && screenshotInputRef.current.click()}
         >
+          <i className="ti ti-camera" style={{ fontSize: '18px' }} />
           {uploadingScreenshot
             ? 'Uploading…'
-            : hasScreenshot ? 'Replace screenshot' : 'Upload screenshot'}
+            : hasScreenshot ? 'Replace payment screenshot' : 'Upload payment screenshot'}
         </button>
-      </div>
+      </>
     );
   };
 
@@ -399,26 +566,27 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
     const planner = event.organizerName || 'the planner';
     return (
       <div style={S.card}>
-        <div style={{ fontWeight: 500, marginBottom: '4px' }}>🎩 Tip {planner}?</div>
-        <p style={{ fontSize: '12px', color: '#777', margin: '0 0 10px' }}>
-          Totally optional — {planner} organized this on their own time. Stays $0 unless you choose to add.
+        <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '4px' }}>Tip {planner}?</div>
+        <p style={{ fontSize: '13px', color: '#888', margin: '0 0 12px' }}>
+          Totally optional — stays $0 unless you choose to add.
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '10px' }}>
           {presets.map(p => (
             <button
               key={p}
+              type="button"
               disabled={savingTip}
               onClick={() => sendTip(p)}
               style={{
                 padding: '10px 4px',
-                borderRadius: '8px',
-                border: guestTip === p ? '2px solid #085041' : '0.5px solid #ddd',
-                background: guestTip === p ? '#e1f5ee' : 'white',
-                color: guestTip === p ? '#085041' : '#333',
+                borderRadius: '999px',
+                border: guestTip === p ? `2px solid ${BRAND}` : `0.5px solid ${CARD_BORDER}`,
+                background: guestTip === p ? TEAL_LIGHT : 'white',
+                color: guestTip === p ? BRAND : '#333',
                 fontSize: '14px',
                 fontWeight: 500,
                 cursor: savingTip ? 'wait' : 'pointer',
-                fontFamily: 'inherit',
+                fontFamily: FONT,
               }}
             >
               {p === 0 ? 'No tip' : `$${p}`}
@@ -426,8 +594,7 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
           ))}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '13px', color: '#666' }}>Custom:</span>
-          <span style={{ fontSize: '14px', color: '#666' }}>$</span>
+          <span style={{ fontSize: '13px', color: '#666' }}>Custom $</span>
           <input
             type="number"
             min="0"
@@ -443,7 +610,7 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
               const v = Math.max(0, Number(e.target.value) || 0);
               sendTip(v);
             }}
-            style={{ ...S.input, padding: '6px 8px', fontSize: '14px', flex: 1 }}
+            style={{ ...S.input, padding: '10px 14px', fontSize: '14px', flex: 1 }}
           />
         </div>
       </div>
@@ -456,16 +623,16 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
   if (lockedOut) {
     return (
       <div style={S.page}>
-        <div style={S.frame}>
-          <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+        <div style={S.shell}>
+          <div style={{ ...S.card, padding: '40px 24px', textAlign: 'center' }}>
             <div style={{ fontSize: '40px', marginBottom: '8px' }}>🔒</div>
-            <h2 style={{ fontSize: '20px', margin: '0 0 8px', fontWeight: 500 }}>This pool has closed</h2>
+            <h2 style={{ fontSize: '20px', margin: '0 0 8px', fontWeight: 600 }}>This event has closed</h2>
             <p style={{ fontSize: '14px', color: '#666', margin: '0 0 12px' }}>
               {event.eventName || 'The event'} stopped accepting new {mode === 'open_pool' ? 'contributions' : 'RSVPs'} on {formatDeadline(deadlineDate)}.
             </p>
             {event.organizerName && (
               <p style={{ fontSize: '13px', color: '#999', margin: 0 }}>
-                Reach out to {event.organizerName} directly if you'd still like to chip in.
+                Reach out to {event.organizerName} directly if you&apos;d still like to chip in.
               </p>
             )}
           </div>
@@ -489,394 +656,396 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
     const showSuggestion = suggestion > 0;
     const isBroadcastFirstTime = inviteMode === 'broadcast' && !guestId;
 
+    const poolPct = goal > 0 ? Math.min(100, (pooledTotal / goal) * 100) : 0;
+    const countdownLabel = deadlineCountdownLabel(deadlineDate, deadlinePassed);
+    const paymentTotal = (hasPledged ? pledged : 0) + guestTip;
+
     return (
       <div style={S.page}>
-        <div style={S.frame}>
+        <div style={S.shell}>
           {preview && (
-            <div style={{ background: '#fef6dd', color: '#7a5d00', padding: '10px 16px', fontSize: '13px', fontWeight: 500, textAlign: 'center', borderBottom: '0.5px solid #f0e3a8' }}>
+            <div style={{ background: '#fef6dd', color: '#7a5d00', padding: '10px 16px', fontSize: '13px', fontWeight: 500, textAlign: 'center', borderRadius: '14px', marginBottom: '12px' }}>
               👁 Preview mode — actions are disabled
             </div>
           )}
-          <div style={{ padding: '14px 20px' }}>
-            <div style={{ marginBottom: '12px' }}>
-              <div style={{ fontSize: '11px', color: '#999', letterSpacing: '0.5px' }}>YOU'RE INVITED TO CHIP IN</div>
-              <h2 style={{ fontSize: '20px', margin: '2px 0 0', fontWeight: 500 }}>{event.eventName || 'Group pool'}</h2>
-              {initialGuest && !isBroadcastFirstTime && <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>Hi {initialGuest.name} 👋</div>}
-              {!initialGuest && initialGuestIdProp && <div style={{ fontSize: '12px', color: '#a55', marginTop: '4px' }}>Your guest link may be outdated — please contact the organizer.</div>}
-              {event.organizerName && <div style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>From {event.organizerName}</div>}
-            </div>
 
-            {/* Pool status */}
-            <div style={S.card}>
-              <div style={S.label}>Pooled so far</div>
-              <div style={{ fontSize: '28px', fontWeight: 500 }}>${pooledTotal.toLocaleString()}</div>
-              <div style={{ fontSize: '12px', color: '#777', marginTop: '4px' }}>
-                {contributors} {contributors === 1 ? 'person has' : 'people have'} chipped in
-              </div>
-              {goal > 0 && (
-                <>
-                  <div style={{ height: '6px', background: '#eee', borderRadius: '999px', marginTop: '10px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${Math.min(100, (pooledTotal / goal) * 100)}%`, background: '#085041' }} />
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#777', marginTop: '6px' }}>Goal: ${goal.toLocaleString()}</div>
-                </>
-              )}
-            </div>
-
-            {/* Pledge box */}
-            {!hasPledged && !declined && (
-              <div style={S.card}>
-                <div style={{ fontWeight: 500, marginBottom: '4px' }}>How much would you like to chip in?</div>
-                {showSuggestion && (
-                  <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>
-                    Suggested: <strong>${suggestion}</strong> {unitLabel}. No pressure — give what feels right, or skip.
-                  </p>
-                )}
-                {!showSuggestion && (
-                  <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>
-                    Any amount helps. No pressure — give what feels right, or skip.
-                  </p>
-                )}
-
-                {isBroadcastFirstTime && (
-                  <>
-                    <label style={S.label}>Your name</label>
-                    <input
-                      type="text"
-                      style={{ ...S.input, marginBottom: '10px' }}
-                      value={selfName}
-                      onChange={e => setSelfName(e.target.value)}
-                      placeholder="So the organizer knows who chipped in"
-                    />
-                  </>
-                )}
-
-                {hasCustomField && (
-                  <>
-                    <label style={S.label}>{customFieldLabel}</label>
-                    <input
-                      type="text"
-                      style={{ ...S.input, marginBottom: '10px' }}
-                      value={customFieldValue}
-                      onChange={e => setCustomFieldValue(e.target.value)}
-                      maxLength={80}
-                    />
-                  </>
-                )}
-
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
-                  <span style={{ fontSize: '20px', color: '#777' }}>$</span>
-                  <input
-                    type="number"
-                    min="0"
-                    style={{ ...S.input, fontSize: '18px' }}
-                    value={amount}
-                    onChange={e => setAmount(e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-                <button
-                  style={{ ...S.btn, ...S.btnPrimary, opacity: submitting ? 0.6 : 1 }}
-                  disabled={submitting}
-                  onClick={sendContribution}
-                >
-                  {submitting ? 'Saving…' : 'Confirm my contribution'}
-                </button>
-                {guestId && (
-                  <button
-                    style={{ ...S.btn, marginTop: '8px' }}
-                    disabled={submitting}
-                    onClick={() => sendRsvp('declined')}
-                  >
-                    I can't this time
-                  </button>
-                )}
-              </div>
+          {/* Event header */}
+          <div style={S.card}>
+            <h1 style={{ fontSize: '22px', fontWeight: 700, margin: '0 0 6px', color: '#1a1a1a', lineHeight: 1.25 }}>
+              {event.eventName || 'Group pool'}
+            </h1>
+            {event.organizerName && (
+              <p style={{ fontSize: '14px', color: '#666', margin: 0 }}>
+                Organized by {event.organizerName}
+              </p>
             )}
-
-            {hasPledged && pledged > 0 && (
-              <div style={S.card}>
-                <div style={{ fontSize: '13px', color: '#777' }}>Your contribution</div>
-                <div style={{ fontSize: '28px', fontWeight: 500, color: '#085041' }}>${pledged}</div>
-                <p style={{ fontSize: '12px', color: '#777', margin: '8px 0 0' }}>Thanks! Send your e-Transfer below.</p>
-                {tipsEnabled && guestTip > 0 && (
-                  <>
-                    <div style={{ height: '0.5px', background: '#eee', margin: '12px 0 8px' }} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666' }}>
-                      <span>Contribution</span>
-                      <span>${pledged}</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666', marginTop: '4px' }}>
-                      <span>Tip 🎩</span>
-                      <span>${guestTip}</span>
-                    </div>
-                    <div style={{ height: '0.5px', background: '#eee', margin: '8px 0' }} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 500 }}>
-                      <span>Total</span>
-                      <span>${pledged + guestTip}</span>
-                    </div>
-                  </>
-                )}
-                <button
-                  style={{ ...S.btn, marginTop: '10px' }}
-                  onClick={() => { setPledged(null); setAmount(String(pledged)); }}
-                >
-                  Change amount
-                </button>
-              </div>
+            {initialGuest && !isBroadcastFirstTime && (
+              <p style={{ fontSize: '13px', color: '#888', margin: '8px 0 0' }}>Hi {initialGuest.name} 👋</p>
             )}
-
-            {hasPledged && pledged === 0 && (
-              <div style={S.card}>
-                <p style={{ fontSize: '14px', color: '#555', margin: 0 }}>
-                  You've passed on this one — totally fine. Tap below to change your mind.
-                </p>
-                <button
-                  style={{ ...S.btn, marginTop: '10px' }}
-                  onClick={() => { setPledged(null); setAmount(showSuggestion ? String(suggestion) : ''); }}
-                >
-                  Actually, I'll chip in
-                </button>
-              </div>
-            )}
-
-            {declined && (
-              <div style={S.card}>
-                <p style={{ fontSize: '14px', color: '#555', margin: 0 }}>
-                  You've declined this invite. Tap below if that changes.
-                </p>
-                <button
-                  style={{ ...S.btn, marginTop: '10px' }}
-                  disabled={submitting || !guestId}
-                  onClick={() => { setStatus(null); }}
-                >
-                  Actually, I'd like to chip in
-                </button>
-              </div>
-            )}
-
-            {/* Tip prompt — only when organizer has enabled tipping and guest has pledged */}
-            {hasPledged && pledged > 0 && renderTipCard()}
-
-            {/* Interac instructions — only after pledging > 0 */}
-            {hasPledged && pledged > 0 && (
-              <div style={S.card}>
-                <div style={{ fontWeight: 500, marginBottom: '8px' }}>💸 Send ${pledged + guestTip}</div>
-                {organizerEmail ? (
-                  <>
-                    <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Interac e-Transfer to:</p>
-                    <div style={{ background: '#f5f3ee', padding: '10px 12px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '14px', wordBreak: 'break-all' }}>{organizerEmail}</div>
-                    {tipsEnabled && guestTip > 0 && (
-                      <p style={{ fontSize: '11px', color: '#666', margin: '8px 0 0' }}>
-                        ${pledged} contribution + ${guestTip} tip = <strong>${pledged + guestTip}</strong>
-                      </p>
-                    )}
-                    <p style={{ fontSize: '11px', color: '#999', margin: '6px 0 0' }}>Include event code: {event.id.toUpperCase()}</p>
-                  </>
-                ) : (
-                  <p style={{ fontSize: '12px', color: '#a55', margin: 0 }}>The organizer hasn't added their Interac email yet. Contact them directly.</p>
-                )}
-              </div>
-            )}
-
-            {/* Screenshot upload — only after a real pledge */}
-            {hasPledged && pledged > 0 && renderScreenshotCard()}
-
-            {/* What it's for — informational only */}
-            {(event.expenses || []).some(e => Number(e.amount) > 0 || e.name) && (
-              <div style={S.card}>
-                <div style={{ fontWeight: 500, marginBottom: '8px' }}>What we're hoping to cover</div>
-                {(event.expenses || []).map(e => (
-                  <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '14px' }}>
-                    <span style={{ color: '#777' }}>{e.name}</span>
-                    {Number(e.amount) > 0 && <span style={{ color: '#777' }}>~${(Number(e.amount) || 0).toLocaleString()}</span>}
-                  </div>
-                ))}
-                <p style={{ fontSize: '11px', color: '#999', margin: '8px 0 0' }}>
-                  Rough plan — we'll do what the pool allows.
-                </p>
-              </div>
+            {!initialGuest && initialGuestIdProp && (
+              <p style={{ fontSize: '12px', color: '#E8645A', margin: '8px 0 0' }}>
+                Your guest link may be outdated — please contact the organizer.
+              </p>
             )}
           </div>
+
+          {/* Pool status */}
+          <div style={S.card}>
+            <div style={S.label}>Pooled so far</div>
+            <div style={S.shareAmount}>${pooledTotal.toLocaleString()}</div>
+            <p style={{ fontSize: '13px', color: '#888', margin: '0 0 12px' }}>
+              {contributors} {contributors === 1 ? 'person has' : 'people have'} chipped in
+            </p>
+            {countdownLabel && (
+              <div style={{ ...S.deadlinePill, marginBottom: goal > 0 ? '12px' : 0 }}>
+                <i className="ti ti-clock" style={{ fontSize: '14px' }} />
+                {countdownLabel}
+              </div>
+            )}
+            {goal > 0 && (
+              <>
+                <div style={{ height: '6px', background: TEAL_LIGHT, borderRadius: '999px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${poolPct}%`, background: BRAND, borderRadius: '999px' }} />
+                </div>
+                <p style={{ fontSize: '12px', color: '#888', margin: '8px 0 0' }}>
+                  Goal: ${goal.toLocaleString()} · {Math.round(poolPct)}% funded
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Pledge box */}
+          {!hasPledged && !declined && (
+            <div style={S.card}>
+              <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '6px' }}>How much would you like to chip in?</div>
+              {showSuggestion ? (
+                <p style={{ fontSize: '13px', color: '#888', margin: '0 0 12px' }}>
+                  Suggested: <strong style={{ color: BRAND }}>${suggestion}</strong> {unitLabel}. No pressure — give what feels right.
+                </p>
+              ) : (
+                <p style={{ fontSize: '13px', color: '#888', margin: '0 0 12px' }}>
+                  Any amount helps. No pressure — give what feels right.
+                </p>
+              )}
+
+              {isBroadcastFirstTime && (
+                <>
+                  <label style={S.label}>Your name</label>
+                  <input
+                    type="text"
+                    style={{ ...S.input, marginBottom: '12px' }}
+                    value={selfName}
+                    onChange={e => setSelfName(e.target.value)}
+                    placeholder="So the organizer knows who chipped in"
+                  />
+                </>
+              )}
+
+              {hasCustomField && (
+                <>
+                  <label style={S.label}>{customFieldLabel}</label>
+                  <input
+                    type="text"
+                    style={{ ...S.input, marginBottom: '12px' }}
+                    value={customFieldValue}
+                    onChange={e => setCustomFieldValue(e.target.value)}
+                    maxLength={80}
+                  />
+                </>
+              )}
+
+              <label style={S.label}>Amount</label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '16px' }}>
+                <span style={{ fontSize: '20px', color: BRAND, fontWeight: 600 }}>$</span>
+                <input
+                  type="number"
+                  min="0"
+                  style={{ ...S.input, fontSize: '18px', fontWeight: 600, color: BRAND }}
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          )}
+
+          {!hasPledged && !declined && (
+            <>
+              <button
+                type="button"
+                style={{ ...S.btnIn, opacity: submitting ? 0.6 : 1 }}
+                disabled={submitting}
+                onClick={sendContribution}
+              >
+                {submitting ? 'Saving…' : 'Confirm my contribution'}
+              </button>
+              {guestId && (
+                <button
+                  type="button"
+                  style={{ ...S.btnOut, opacity: submitting ? 0.6 : 1 }}
+                  disabled={submitting}
+                  onClick={() => sendRsvp('declined')}
+                >
+                  Can&apos;t make it
+                </button>
+              )}
+            </>
+          )}
+
+          {hasPledged && pledged > 0 && (
+            <div style={S.card}>
+              <div style={S.label}>Your contribution</div>
+              <div style={S.shareAmount}>${pledged.toLocaleString()}</div>
+              <p style={{ fontSize: '13px', color: '#888', margin: '0 0 12px' }}>Thanks! Send your e-Transfer below.</p>
+              {tipsEnabled && guestTip > 0 && (
+                <div style={{ paddingTop: '14px', borderTop: `0.5px solid ${CARD_BORDER}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666', marginBottom: '4px' }}>
+                    <span>Contribution</span><span>${pledged.toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666', marginBottom: '8px' }}>
+                    <span>Tip</span><span>${guestTip.toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 600, color: BRAND }}>
+                    <span>Total due</span><span>${paymentTotal.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                style={{ ...S.btnOut, marginTop: '14px', marginBottom: 0 }}
+                onClick={() => { setPledged(null); setAmount(String(pledged)); }}
+              >
+                Change amount
+              </button>
+            </div>
+          )}
+
+          {hasPledged && pledged === 0 && (
+            <div style={S.card}>
+              <p style={{ fontSize: '14px', color: '#666', margin: 0 }}>
+                You&apos;ve passed on this one — totally fine. Tap below to change your mind.
+              </p>
+              <button
+                type="button"
+                style={{ ...S.btnIn, marginTop: '14px', marginBottom: 0 }}
+                onClick={() => { setPledged(null); setAmount(showSuggestion ? String(suggestion) : ''); }}
+              >
+                Actually, I&apos;ll chip in
+              </button>
+            </div>
+          )}
+
+          {declined && (
+            <div style={S.card}>
+              <p style={{ fontSize: '14px', color: '#666', margin: 0 }}>
+                You&apos;ve declined this invite. Tap below if that changes.
+              </p>
+              <button
+                type="button"
+                style={{ ...S.btnIn, marginTop: '14px', marginBottom: 0 }}
+                disabled={submitting || !guestId}
+                onClick={() => { setStatus(null); }}
+              >
+                Actually, I&apos;d like to chip in
+              </button>
+            </div>
+          )}
+
+          {hasPledged && pledged > 0 && renderTipCard()}
+
+          {hasPledged && pledged > 0 && renderCopyableEmail(`$${paymentTotal.toLocaleString()}`)}
+
+          {hasPledged && pledged > 0 && renderScreenshotUpload()}
+
+          {(event.expenses || []).some(e => Number(e.amount) > 0 || e.name) && (
+            <div style={S.card}>
+              <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '10px' }}>What we&apos;re hoping to cover</div>
+              {(event.expenses || []).map(e => (
+                <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '14px' }}>
+                  <span style={{ color: '#666' }}>{e.name}</span>
+                  {Number(e.amount) > 0 && (
+                    <span style={{ color: '#1a1a1a', fontWeight: 500 }}>~${(Number(e.amount) || 0).toLocaleString()}</span>
+                  )}
+                </div>
+              ))}
+              <p style={{ fontSize: '12px', color: '#999', margin: '10px 0 0' }}>
+                Rough plan — we&apos;ll do what the pool allows.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
   // ============================================================
-  // COST SPLIT VIEW
+  // COST SPLIT VIEW — guest payment screen
   // ============================================================
+  const displayShare = deadlinePassed ? shareCurrent : shareIfAllJoin;
+  const countdownLabel = deadlineCountdownLabel(deadlineDate, deadlinePassed);
+  const canShowPayment = confirmedSelf && (!deadlineDate || deadlinePassed);
+  const paymentTotal = shareCurrent + guestTip;
+
   return (
     <div style={S.page}>
-      <div style={S.frame}>
+      <div style={S.shell}>
         {preview && (
-          <div style={{ background: '#fef6dd', color: '#7a5d00', padding: '10px 16px', fontSize: '13px', fontWeight: 500, textAlign: 'center', borderBottom: '0.5px solid #f0e3a8' }}>
+          <div style={{ background: '#fef6dd', color: '#7a5d00', padding: '10px 16px', fontSize: '13px', fontWeight: 500, textAlign: 'center', borderRadius: '14px', marginBottom: '12px' }}>
             👁 Preview mode — actions are disabled
           </div>
         )}
-        <div style={{ padding: '14px 20px' }}>
-          <div style={{ marginBottom: '12px' }}>
-            <div style={{ fontSize: '11px', color: '#999', letterSpacing: '0.5px' }}>YOU'RE INVITED</div>
-            <h2 style={{ fontSize: '20px', margin: '2px 0 0', fontWeight: 500 }}>{event.eventName || 'Group event'}</h2>
-            {initialGuest && <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>Hi {initialGuest.name} 👋</div>}
-            {!initialGuest && initialGuestIdProp && <div style={{ fontSize: '12px', color: '#a55', marginTop: '4px' }}>Your guest link may be outdated — please contact the organizer.</div>}
-            {event.organizerName && <div style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>From {event.organizerName}</div>}
-          </div>
 
-          {!declined && (
-            <div style={S.card}>
-              <div style={S.label}>Your share</div>
-              <div style={{ fontSize: '32px', fontWeight: 500 }}>${deadlinePassed ? shareCurrent : shareIfAllJoin}</div>
-              {!deadlinePassed && (
-                <>
-                  <div style={{ fontSize: '12px', color: '#777', marginTop: '4px' }}>
-                    If all {invitedCount} {invitedCount === 1 ? 'guest joins' : 'guests join'}.
-                  </div>
-                  {shareCurrent !== shareIfAllJoin && (
-                    <div style={{ fontSize: '12px', color: '#a55', marginTop: '4px' }}>
-                      Could rise to ~${shareCurrent} if some can't make it.
-                    </div>
-                  )}
-                  {deadlineDate && (
-                    <div style={{ fontSize: '12px', color: '#085041', marginTop: '6px', fontWeight: 500 }}>
-                      Final amount locks in after {formatDeadline(deadlineDate)}.
-                    </div>
-                  )}
-                </>
-              )}
-              {deadlinePassed && (
-                <div style={{ fontSize: '12px', color: '#085041', marginTop: '4px', fontWeight: 500 }}>
-                  ✓ Final — RSVPs are closed.
-                </div>
-              )}
-              {tipsEnabled && confirmedSelf && guestTip > 0 && (
-                <>
-                  <div style={{ height: '0.5px', background: '#eee', margin: '12px 0 8px' }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666' }}>
-                    <span>Your share</span>
-                    <span>${deadlinePassed ? shareCurrent : shareIfAllJoin}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666', marginTop: '4px' }}>
-                    <span>Tip 🎩</span>
-                    <span>${guestTip}</span>
-                  </div>
-                  <div style={{ height: '0.5px', background: '#eee', margin: '8px 0' }} />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 500 }}>
-                    <span>Total</span>
-                    <span>${(deadlinePassed ? shareCurrent : shareIfAllJoin) + guestTip}</span>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {hasCustomField && !declined && (
-            <div style={S.card}>
-              <label style={S.label}>{customFieldLabel}</label>
-              <input
-                type="text"
-                style={S.input}
-                value={customFieldValue}
-                onChange={e => setCustomFieldValue(e.target.value)}
-                maxLength={80}
-              />
-              <p style={{ fontSize: '11px', color: '#999', margin: '4px 0 0' }}>
-                Saved when you RSVP.
-              </p>
-            </div>
-          )}
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-            <button
-              disabled={submitting || !guestId}
-              onClick={() => sendRsvp('confirmed')}
-              style={{
-                ...S.btn,
-                background: confirmedSelf ? '#085041' : '#e1f5ee',
-                borderColor: '#5dcaa5',
-                color: confirmedSelf ? 'white' : '#085041',
-                opacity: submitting ? 0.6 : 1,
-              }}
-            >
-              {confirmedSelf ? "You're in ✓" : "I'm in ✓"}
-            </button>
-            <button
-              disabled={submitting || !guestId}
-              onClick={() => sendRsvp('declined')}
-              style={{
-                ...S.btn,
-                background: declined ? '#791f1f' : '#fcebeb',
-                borderColor: '#f09595',
-                color: declined ? 'white' : '#791f1f',
-                opacity: submitting ? 0.6 : 1,
-              }}
-            >
-              {declined ? "Declined ✗" : "Can't make it ✗"}
-            </button>
-          </div>
-
-          {!guestId && (
-            <p style={{ fontSize: '11px', color: '#999', textAlign: 'center', margin: '0 0 12px' }}>
-              Open your personal invite link to RSVP.
+        {/* Event header */}
+        <div style={S.card}>
+          <h1 style={{ fontSize: '22px', fontWeight: 700, margin: '0 0 6px', color: '#1a1a1a', lineHeight: 1.25 }}>
+            {event.eventName || 'Group event'}
+          </h1>
+          {event.organizerName && (
+            <p style={{ fontSize: '14px', color: '#666', margin: 0 }}>
+              Organized by {event.organizerName}
             </p>
           )}
-
-          {confirmedSelf && renderTipCard()}
-
-          {confirmedSelf && (!deadlineDate || deadlinePassed) && (
-            <div style={S.card}>
-              <div style={{ fontWeight: 500, marginBottom: '8px' }}>💸 Send ${shareCurrent + guestTip}</div>
-              {organizerEmail ? (
-                <>
-                  <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Interac e-Transfer to:</p>
-                  <div style={{ background: '#f5f3ee', padding: '10px 12px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '14px', wordBreak: 'break-all' }}>{organizerEmail}</div>
-                  {tipsEnabled && guestTip > 0 && (
-                    <p style={{ fontSize: '11px', color: '#666', margin: '8px 0 0' }}>
-                      ${shareCurrent} share + ${guestTip} tip = <strong>${shareCurrent + guestTip}</strong>
-                    </p>
-                  )}
-                  <p style={{ fontSize: '11px', color: '#999', margin: '6px 0 0' }}>Include event code: {event.id.toUpperCase()}</p>
-                </>
-              ) : (
-                <p style={{ fontSize: '12px', color: '#a55', margin: 0 }}>The organizer hasn't added their Interac email yet. Contact them directly.</p>
-              )}
-            </div>
+          {initialGuest && (
+            <p style={{ fontSize: '13px', color: '#888', margin: '8px 0 0' }}>Hi {initialGuest.name} 👋</p>
           )}
-
-          {confirmedSelf && deadlineDate && !deadlinePassed && (
-            <div style={{ ...S.card, background: '#f5f3ee', border: '0.5px dashed #c9c1ad' }}>
-              <div style={{ fontWeight: 500, marginBottom: '4px' }}>⏳ Hold off on sending money</div>
-              <p style={{ fontSize: '13px', color: '#666', margin: 0 }}>
-                You're confirmed. Once RSVPs close on <strong>{formatDeadline(deadlineDate)}</strong>, you'll see your final amount{tipsEnabled && guestTip > 0 ? ' (share + tip)' : ''} and where to send it.
-              </p>
-            </div>
-          )}
-
-          {confirmedSelf && (!deadlineDate || deadlinePassed) && renderScreenshotCard()}
-
-          {declined && (
-            <p style={{ fontSize: '13px', color: '#777', textAlign: 'center', padding: '20px 0' }}>You've declined this invite. Tap "I'm in" if that changes.</p>
-          )}
-
-          {!declined && (
-            <div style={S.card}>
-              <div style={{ fontWeight: 500, marginBottom: '8px' }}>What's it for</div>
-              {guestExpenseRows.map(e => (
-                <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '14px' }}>
-                  <span style={{ color: e._onThis ? '#777' : '#bbb', textDecoration: e._onThis ? 'none' : 'line-through' }}>
-                    {e.name}
-                    {!e._onThis && <span style={{ marginLeft: '6px', fontSize: '11px', color: '#bbb' }}>not on this</span>}
-                  </span>
-                  <span style={{ color: e._onThis ? 'inherit' : '#bbb' }}>${(Number(e.amount) || 0).toLocaleString()}</span>
-                </div>
-              ))}
-              <div style={{ height: '0.5px', background: '#eee', margin: '8px 0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 500 }}>
-                <span>Group total</span><span>${total.toLocaleString()}</span>
-              </div>
-            </div>
+          {!initialGuest && initialGuestIdProp && (
+            <p style={{ fontSize: '12px', color: '#E8645A', margin: '8px 0 0' }}>
+              Your guest link may be outdated — please contact the organizer.
+            </p>
           )}
         </div>
+
+        {!declined && (
+          <div style={S.card}>
+            <div style={S.label}>Your share</div>
+            <div style={S.shareAmount}>${displayShare.toLocaleString()}</div>
+
+            {countdownLabel && (
+              <div style={S.deadlinePill}>
+                <i className="ti ti-clock" style={{ fontSize: '14px' }} />
+                {countdownLabel}
+              </div>
+            )}
+
+            {!deadlinePassed && deadlineDate && (
+              <p style={{ fontSize: '12px', color: '#888', margin: '12px 0 0' }}>
+                Final amount locks in after {formatDeadline(deadlineDate)}.
+                {shareCurrent !== shareIfAllJoin && (
+                  <> Could adjust to ~${shareCurrent.toLocaleString()} based on who joins.</>
+                )}
+              </p>
+            )}
+            {deadlinePassed && (
+              <p style={{ fontSize: '12px', color: BRAND, margin: '12px 0 0', fontWeight: 500 }}>
+                Final amount — RSVPs are closed.
+              </p>
+            )}
+
+            {tipsEnabled && confirmedSelf && guestTip > 0 && (
+              <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: `0.5px solid ${CARD_BORDER}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666', marginBottom: '4px' }}>
+                  <span>Share</span><span>${displayShare.toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#666', marginBottom: '8px' }}>
+                  <span>Tip</span><span>${guestTip.toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 600, color: BRAND }}>
+                  <span>Total due</span><span>${paymentTotal.toLocaleString()}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {hasCustomField && !declined && (
+          <div style={S.card}>
+            <label style={S.label}>{customFieldLabel}</label>
+            <input
+              type="text"
+              style={S.input}
+              value={customFieldValue}
+              onChange={e => setCustomFieldValue(e.target.value)}
+              maxLength={80}
+            />
+            <p style={{ fontSize: '11px', color: '#999', margin: '6px 0 0' }}>Saved when you RSVP.</p>
+          </div>
+        )}
+
+        <button
+          type="button"
+          disabled={submitting || !guestId}
+          onClick={() => sendRsvp('confirmed')}
+          style={{
+            ...S.btnIn,
+            ...(confirmedSelf ? S.btnInActive : {}),
+            opacity: submitting ? 0.6 : 1,
+          }}
+        >
+          {confirmedSelf ? "You're in ✓" : "I'm in"}
+        </button>
+        <button
+          type="button"
+          disabled={submitting || !guestId}
+          onClick={() => sendRsvp('declined')}
+          style={{
+            ...S.btnOut,
+            ...(declined ? S.btnOutActive : {}),
+            opacity: submitting ? 0.6 : 1,
+          }}
+        >
+          {declined ? "Declined" : "Can't make it"}
+        </button>
+
+        {!guestId && (
+          <p style={{ fontSize: '12px', color: '#999', textAlign: 'center', margin: '0 0 16px' }}>
+            Open your personal invite link to RSVP.
+          </p>
+        )}
+
+        {confirmedSelf && deadlineDate && !deadlinePassed && (
+          <div style={{ ...S.card, background: TEAL_LIGHT, border: `0.5px solid ${BRAND}` }}>
+            <div style={{ fontWeight: 600, fontSize: '14px', color: BRAND, marginBottom: '4px' }}>
+              Hold off on sending money
+            </div>
+            <p style={{ fontSize: '13px', color: '#666', margin: 0 }}>
+              You&apos;re confirmed. Payment details appear once RSVPs close on{' '}
+              <strong>{formatDeadline(deadlineDate)}</strong>.
+            </p>
+          </div>
+        )}
+
+        {canShowPayment && renderCopyableEmail(`$${paymentTotal.toLocaleString()}`)}
+
+        {canShowPayment && renderScreenshotUpload()}
+
+        {confirmedSelf && renderTipCard()}
+
+        {declined && (
+          <p style={{ fontSize: '14px', color: '#888', textAlign: 'center', padding: '8px 0 16px' }}>
+            You&apos;ve declined this invite. Tap &ldquo;I&apos;m in&rdquo; if that changes.
+          </p>
+        )}
+
+        {!declined && guestExpenseRows.some(e => e._onThis) && (
+          <div style={S.card}>
+            <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '10px' }}>What it&apos;s for</div>
+            {guestExpenseRows.map(e => (
+              <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '14px' }}>
+                <span style={{ color: e._onThis ? '#666' : '#bbb', textDecoration: e._onThis ? 'none' : 'line-through' }}>
+                  {e.name}
+                </span>
+                <span style={{ color: e._onThis ? '#1a1a1a' : '#bbb', fontWeight: 500 }}>
+                  ${(Number(e.amount) || 0).toLocaleString()}
+                </span>
+              </div>
+            ))}
+            <div style={{ height: '0.5px', background: CARD_BORDER, margin: '10px 0' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, fontSize: '14px' }}>
+              <span>Group total</span>
+              <span>${total.toLocaleString()}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
