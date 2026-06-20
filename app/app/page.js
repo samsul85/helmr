@@ -991,12 +991,24 @@ export default function Helmr() {
 
   // Reset all event state so "Plan something new" starts from a clean slate.
   // Without this, fields from the previously-open event leak into the new one.
+  const countUserEvents = () => loadSavedEvents()
+    .map(normalizeSavedEvent)
+    .filter(Boolean)
+    .length;
+
   const checkEventLimit = () => {
-    const count = loadSavedEvents().length;
+    // Free tier: 1 event total — active and archived both count toward the limit.
+    const count = countUserEvents();
     return { blocked: count >= 1 };
   };
 
   const startNewEvent = async () => {
+    const { blocked } = checkEventLimit();
+    if (blocked) {
+      setUpgradeOpen(true);
+      return;
+    }
+
     setEventId(null);
     setEventType(null);
     setEventName('');
