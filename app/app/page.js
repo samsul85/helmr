@@ -105,6 +105,7 @@ function normalizeSavedEvent(event) {
     goal: Number(event.goal) || 0,
     paidCount: Number(event.paidCount) || 0,
     guestCount: Number(event.guestCount) || 0,
+    archived: !!event.archived,
     updatedAt: Number(event.updatedAt || event.createdAt) || Date.now(),
   };
 }
@@ -524,6 +525,7 @@ export default function Helmr() {
   const [shareOpen, setShareOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -623,9 +625,51 @@ export default function Helmr() {
   };
 
   const removeSavedEvent = async (ev) => {
-    if (await dlg.confirm(`Remove "${ev.name}" from this list? (The event itself isn't deleted.)`)) {
+    if (await dlg.confirm('Remove from your list? The event link still works for guests.')) {
       removeEventFromLocal(ev.id);
       setSavedEvents(prev => prev.filter(x => x.id !== ev.id));
+    }
+  };
+
+  const archiveEvent = async () => {
+    if (!eventId) return;
+    const confirmed = await dlg.confirm(
+      'Archive this event? It will be hidden from your list but guest links will still work. You can restore it later using the event ID.',
+      'Archive this event?',
+      { confirmLabel: 'Archive' },
+    );
+    if (!confirmed) return;
+    try {
+      setSaving(true);
+      const res = await fetch(`/api/events/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      const prev = loadSavedEvents().find(e => e.id === eventId);
+      const guests = people.filter(p => p.role !== 'organizer');
+      saveEventToLocal({
+        id: eventId,
+        name: eventName || prev?.name || 'Untitled event',
+        eventType: eventType || prev?.eventType || 'other',
+        mode,
+        responseDeadline: datetimeLocalToIso(responseDeadline) || prev?.responseDeadline || '',
+        total: expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0),
+        pooled: people.reduce((s, p) => s + (Number(p.contributedAmount) || 0), 0),
+        goal: Number(goal) || 0,
+        paidCount: guests.filter(p => p.status === 'paid').length,
+        guestCount: guests.length,
+        archived: true,
+        updatedAt: Date.now(),
+      });
+      setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
+      setEventId(null);
+      navigateToScreen('welcome', 'back');
+    } catch {
+      await dlg.alert("Couldn't archive event. Please try again.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -783,6 +827,7 @@ export default function Helmr() {
         goal: Number(data.goal) || 0,
         paidCount: guests.filter(p => p.status === 'paid').length,
         guestCount: guests.length,
+        archived: !!data.archived,
         updatedAt: Date.now(),
       });
       setTab(initialTab);
@@ -825,6 +870,7 @@ export default function Helmr() {
         });
         if (eventId) {
           const guests = people.filter(p => p.role !== 'organizer');
+          const prev = loadSavedEvents().find(e => e.id === eventId);
           saveEventToLocal({
             id: eventId,
             name: eventName || 'Untitled event',
@@ -836,6 +882,7 @@ export default function Helmr() {
             goal: Number(goal) || 0,
             paidCount: guests.filter(p => p.status === 'paid').length,
             guestCount: guests.length,
+            archived: prev?.archived || false,
             updatedAt: Date.now(),
           });
         }
@@ -1041,11 +1088,17 @@ export default function Helmr() {
 
   const renderScreen = () => {
     if (screen === 'welcome') {
-      const welcomeEvents = typeof window !== 'undefined'
+      const allWelcomeEvents = typeof window !== 'undefined'
         ? loadSavedEvents().map(normalizeSavedEvent).filter(Boolean)
         : savedEvents;
-      const activeEventCount = welcomeEvents.filter(ev => !isWelcomeEventDone(ev)).length;
-      const totalCollected = welcomeEvents.reduce(
+      const hasArchivedEvents = allWelcomeEvents.some(ev => ev.archived);
+      const welcomeEvents = showArchived
+        ? allWelcomeEvents
+        : allWelcomeEvents.filter(ev => !ev.archived);
+      const activeEventCount = allWelcomeEvents.filter(ev => !ev.archived && !isWelcomeEventDone(ev)).length;
+      const totalCollected = allWelcomeEvents
+        .filter(ev => !ev.archived)
+        .reduce(
         (sum, ev) => sum + (ev.mode === 'open_pool' ? (ev.pooled || 0) : (ev.total || 0)),
         0,
       );
@@ -1157,7 +1210,11 @@ export default function Helmr() {
           <div style={DS.label}>Your events</div>
 
           {welcomeEvents.length === 0 && (
-            <p style={{ fontSize: '13px', color: '#888', margin: '8px 0 0' }}>No saved events yet — plan something new to get started.</p>
+            <p style={{ fontSize: '13px', color: '#888', margin: '8px 0 0' }}>
+              {hasArchivedEvents && !showArchived
+                ? 'No active events — toggle below to see archived ones.'
+                : 'No saved events yet — plan something new to get started.'}
+            </p>
           )}
 
           {welcomeEvents.map(ev => {
@@ -1231,10 +1288,10 @@ export default function Helmr() {
                       fontWeight: 500,
                       padding: '4px 10px',
                       borderRadius: '999px',
-                      background: done ? '#eeeae0' : colorWithAlpha(evColor, 0.12),
-                      color: done ? '#888' : evColor,
+                      background: ev.archived ? '#eeeae0' : done ? '#eeeae0' : colorWithAlpha(evColor, 0.12),
+                      color: ev.archived ? '#888' : done ? '#888' : evColor,
                     }}>
-                      {done ? 'Done' : 'Active'}
+                      {ev.archived ? 'Archived' : done ? 'Done' : 'Active'}
                     </span>
                     <i className="ti ti-chevron-right" style={{ fontSize: '18px', color: '#ccc' }} />
                   </div>
@@ -1246,6 +1303,28 @@ export default function Helmr() {
               </div>
             );
           })}
+
+          {hasArchivedEvents && (
+            <button
+              type="button"
+              onClick={() => setShowArchived(v => !v)}
+              style={{
+                width: '100%',
+                marginTop: '8px',
+                padding: '10px 14px',
+                borderRadius: '999px',
+                border: `0.5px solid ${CARD_BORDER}`,
+                background: showArchived ? TEAL_LIGHT : 'white',
+                color: showArchived ? BRAND : '#666',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                fontFamily: FONT,
+              }}
+            >
+              {showArchived ? 'Hide archived' : 'Show archived'}
+            </button>
+          )}
         </div>
       </div>
       );
@@ -2344,6 +2423,34 @@ export default function Helmr() {
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Propose a gift; requires organizer approval</p>
               <button style={DS.btn} onClick={async () => { await dlg.alert('Surprise gift flow — propose a gift, organizer approves before it shows up to other guests.'); }}>+ Propose surprise gift</button>
             </div>
+
+            <button
+              type="button"
+              onClick={archiveEvent}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                background: 'white',
+                border: `0.5px solid ${CARD_BORDER}`,
+                borderRadius: '14px',
+                padding: '14px',
+                cursor: 'pointer',
+                fontFamily: FONT,
+                textAlign: 'left',
+                marginBottom: '10px',
+              }}
+            >
+              <i className="ti ti-archive" style={{ fontSize: '20px', color: BRAND, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 500, fontSize: '15px', color: '#1a1a1a', marginBottom: '2px' }}>Archive event</div>
+                <p style={{ fontSize: '12px', color: '#888', margin: 0 }}>
+                  Hide from your list, guest links still work
+                </p>
+              </div>
+              <i className="ti ti-chevron-right" style={{ fontSize: '18px', color: '#ccc', flexShrink: 0 }} />
+            </button>
           </div>
         )}
         </div>

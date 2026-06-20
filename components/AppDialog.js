@@ -136,11 +136,12 @@ export function createDialogHelpers(setDialog) {
         onConfirm: resolve,
       });
     }),
-    confirm: (message, title = '') => new Promise(resolve => {
+    confirm: (message, title = '', options = {}) => new Promise(resolve => {
       setDialog({
         type: 'confirm',
         title,
         message,
+        confirmLabel: options.confirmLabel || 'Confirm',
         onConfirm: () => resolve(true),
         onCancel: () => resolve(false),
       });
