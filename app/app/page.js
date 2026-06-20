@@ -1953,19 +1953,20 @@ export default function Helmr() {
 
         {tab === 'expenses' && (
           <div style={{ padding: '16px' }}>
-            <div style={{ ...DS.statNumber, color: accentColor, marginBottom: '16px' }}>
-              ${total.toLocaleString()}
-              <span style={{ fontSize: '13px', color: '#888', fontWeight: 400, marginLeft: '8px' }}>total</span>
+            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+              <span style={{ ...DS.statNumber, color: accentColor, marginBottom: 0 }}>
+                ${total.toLocaleString()}
+              </span>
+              <span style={{ fontSize: '13px', color: '#888', fontWeight: 400 }}>total</span>
             </div>
             {mode === 'open_pool' && (
-              <p style={{ fontSize: '12px', color: '#777', margin: '0 0 12px', padding: '10px 14px', background: '#f5f3ee', borderRadius: '14px' }}>
-                In Open Pool, expenses are just a wish-list — they don't set each person's share. Guests give what they want, and you spend what's pooled.
+              <p style={{ fontSize: '12px', color: '#777', margin: '0 0 12px', padding: '10px 14px', background: CREAM, borderRadius: '14px', border: `0.5px solid ${CARD_BORDER}` }}>
+                In Open Pool, expenses are just a wish-list — they don&apos;t set each person&apos;s share. Guests give what they want, and you spend what&apos;s pooled.
               </p>
             )}
             {expenses.map(e => {
               const ids = Array.isArray(e.participantIds) ? e.participantIds : [];
               const hasCustom = ids.length > 0;
-              // Eligible = everyone in people list; organizer only if included in split
               const eligible = people.filter(p =>
                 p.role === 'organizer' ? organizerIncludedInSplit : true
               );
@@ -1973,35 +1974,100 @@ export default function Helmr() {
                 ? `Everyone (${eligible.length})`
                 : `${ids.filter(id => eligible.some(p => p.id === id)).length} of ${eligible.length}`;
               return (
-                <div key={e.id} style={{ ...DS.card, marginBottom: '10px' }}>
-                  <input style={{ ...DS.input, marginBottom: '8px' }} value={e.name} onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, name: ev.target.value } : x))} />
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '14px', color: '#777' }}>$</span>
-                    <input style={DS.input} type="number" value={e.amount} onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, amount: ev.target.value } : x))} />
-                    <button style={DS.btnGhost} onClick={() => setExpenses(expenses.filter(x => x.id !== e.id))}>🗑️</button>
+                <div
+                  key={e.id}
+                  style={{
+                    position: 'relative',
+                    background: 'white',
+                    borderRadius: '14px',
+                    padding: '14px',
+                    border: `0.5px solid ${CARD_BORDER}`,
+                    marginBottom: '10px',
+                  }}
+                >
+                  <button
+                    type="button"
+                    aria-label={`Delete ${e.name || 'expense'}`}
+                    onClick={() => setExpenses(expenses.filter(x => x.id !== e.id))}
+                    style={{
+                      position: 'absolute',
+                      top: '10px',
+                      right: '10px',
+                      background: 'none',
+                      border: 'none',
+                      padding: '4px',
+                      cursor: 'pointer',
+                      color: '#bbb',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <i className="ti ti-trash" style={{ fontSize: '16px' }} />
+                  </button>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', paddingRight: '28px', marginBottom: '8px' }}>
+                    <input
+                      value={e.name}
+                      onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, name: ev.target.value } : x))}
+                      placeholder="Expense name"
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        border: 'none',
+                        outline: 'none',
+                        background: 'transparent',
+                        fontSize: '15px',
+                        fontWeight: 500,
+                        fontFamily: FONT,
+                        color: '#1a1a1a',
+                        padding: 0,
+                      }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                      <span style={{ fontSize: '18px', fontWeight: 500, color: accentColor }}>$</span>
+                      <input
+                        type="number"
+                        value={e.amount}
+                        onChange={ev => setExpenses(expenses.map(x => x.id === e.id ? { ...x, amount: ev.target.value } : x))}
+                        style={{
+                          width: '72px',
+                          border: 'none',
+                          outline: 'none',
+                          background: 'transparent',
+                          fontSize: '18px',
+                          fontWeight: 500,
+                          fontFamily: FONT,
+                          color: accentColor,
+                          textAlign: 'right',
+                          padding: 0,
+                        }}
+                      />
+                    </div>
                   </div>
+
                   {mode === 'cost_split' && (
                     <>
-                      <div
-                        style={{
-                          marginTop: '8px',
-                          fontSize: '13px',
-                          color: '#666',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          cursor: 'pointer',
-                          padding: '10px 14px',
-                          background: '#f5f3ee',
-                          borderRadius: '14px',
-                        }}
+                      <button
+                        type="button"
                         onClick={() => toggleExpenseExpanded(e.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          margin: 0,
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          color: '#888',
+                          fontFamily: FONT,
+                          textAlign: 'left',
+                          width: '100%',
+                        }}
                       >
-                        <span>Who's on this: <span style={{ color: '#333', fontWeight: 500 }}>{summary}</span></span>
-                        <span style={{ fontSize: '11px', color: '#999' }}>{expandedExpenseIds.has(e.id) ? '▲' : '▼'}</span>
-                      </div>
+                        Who&apos;s on this: {summary}
+                      </button>
                       {expandedExpenseIds.has(e.id) && (
-                        <div style={{ marginTop: '6px', padding: '4px 4px 0' }}>
+                        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: `0.5px solid ${CARD_BORDER}` }}>
                           {eligible.length === 0 && (
                             <p style={{ fontSize: '12px', color: '#999', margin: '4px 0' }}>Add people on the Guests tab first.</p>
                           )}
@@ -2026,8 +2092,6 @@ export default function Helmr() {
                                     const checked = ev.target.checked;
                                     setExpenses(expenses.map(x => {
                                       if (x.id !== e.id) return x;
-                                      // First edit: initialize participantIds from "everyone".
-                                      // After that, just add/remove the toggled person.
                                       let nextIds = Array.isArray(x.participantIds) && x.participantIds.length > 0
                                         ? [...x.participantIds]
                                         : eligible.map(q => q.id);
@@ -2036,8 +2100,6 @@ export default function Helmr() {
                                       } else {
                                         nextIds = nextIds.filter(id => id !== p.id);
                                       }
-                                      // If they re-selected everyone, drop participantIds back to default ("everyone")
-                                      // so future-added guests are automatically included.
                                       if (nextIds.length === eligible.length && eligible.every(q => nextIds.includes(q.id))) {
                                         return { ...x, participantIds: [] };
                                       }
@@ -2055,6 +2117,7 @@ export default function Helmr() {
                           })}
                           {hasCustom && (
                             <button
+                              type="button"
                               style={{ ...DS.btnGhost, fontSize: '12px', padding: '4px 0', marginTop: '4px' }}
                               onClick={() => setExpenses(expenses.map(x =>
                                 x.id === e.id ? { ...x, participantIds: [] } : x
@@ -2070,10 +2133,28 @@ export default function Helmr() {
                 </div>
               );
             })}
-            <button style={{ ...DS.btn, marginTop: '4px' }} onClick={async () => {
-              const n = await dlg.prompt('Expense name?');
-              if (n) setExpenses([...expenses, { id: Date.now(), name: n, amount: 0 }]);
-            }}>+ Add expense</button>
+            <button
+              type="button"
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                borderRadius: '999px',
+                border: `1.5px solid ${accentColor}`,
+                background: 'white',
+                color: accentColor,
+                cursor: 'pointer',
+                fontSize: '15px',
+                fontWeight: 500,
+                fontFamily: FONT,
+                marginTop: '4px',
+              }}
+              onClick={async () => {
+                const n = await dlg.prompt('Expense name?');
+                if (n) setExpenses([...expenses, { id: Date.now(), name: n, amount: 0 }]);
+              }}
+            >
+              + Add expense
+            </button>
           </div>
         )}
 
