@@ -644,8 +644,8 @@ export default function Helmr() {
           body: JSON.stringify({ archived: true }),
         });
         if (!res.ok) throw new Error('Failed');
-        removeEventFromLocal(ev.id);
-        setSavedEvents(prev => prev.filter(x => x.id !== ev.id));
+        saveEventToLocal({ ...ev, archived: true, updatedAt: Date.now() });
+        setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
       } catch {
         await dlg.alert("Couldn't archive event. Please try again.");
       }
@@ -667,6 +667,27 @@ export default function Helmr() {
       } catch {
         await dlg.alert("Couldn't delete event. Please try again.");
       }
+    }
+  };
+
+  const restoreArchivedEvent = async (ev) => {
+    const confirmed = await dlg.confirm(
+      'Restore this event to your active list?',
+      '',
+      { confirmLabel: 'Restore' },
+    );
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/events/${ev.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: false }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      saveEventToLocal({ ...ev, archived: false, updatedAt: Date.now() });
+      setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
+    } catch {
+      await dlg.alert("Couldn't restore event. Please try again.");
     }
   };
 
@@ -1088,17 +1109,106 @@ export default function Helmr() {
       const allWelcomeEvents = typeof window !== 'undefined'
         ? loadSavedEvents().map(normalizeSavedEvent).filter(Boolean)
         : savedEvents;
-      const hasArchivedEvents = allWelcomeEvents.some(ev => ev.archived);
-      const welcomeEvents = showArchived
-        ? allWelcomeEvents
-        : allWelcomeEvents.filter(ev => !ev.archived);
-      const activeEventCount = allWelcomeEvents.filter(ev => !ev.archived && !isWelcomeEventDone(ev)).length;
-      const totalCollected = allWelcomeEvents
-        .filter(ev => !ev.archived)
-        .reduce(
+      const activeWelcomeEvents = allWelcomeEvents.filter(ev => !ev.archived);
+      const archivedWelcomeEvents = allWelcomeEvents.filter(ev => ev.archived);
+      const hasArchivedEvents = archivedWelcomeEvents.length > 0;
+      const activeEventCount = activeWelcomeEvents.filter(ev => !isWelcomeEventDone(ev)).length;
+      const totalCollected = activeWelcomeEvents.reduce(
         (sum, ev) => sum + (ev.mode === 'open_pool' ? (ev.pooled || 0) : (ev.total || 0)),
         0,
       );
+
+      const renderWelcomeEventCard = (ev, isArchivedSection) => {
+        const evColor = getEventColor(ev.eventType);
+        const typeInfo = eventTypes.find(t => t.id === ev.eventType);
+        const done = isWelcomeEventDone(ev);
+        const progress = welcomeEventProgress(ev);
+        return (
+          <div
+            key={ev.id}
+            className="helmr-pressable"
+            style={{
+              position: 'relative',
+              background: 'white',
+              borderRadius: '18px',
+              border: `0.5px solid ${CARD_BORDER}`,
+              padding: '16px',
+              marginBottom: '10px',
+              cursor: loading ? 'wait' : 'pointer',
+              opacity: isArchivedSection ? 0.6 : 1,
+            }}
+            onClick={() => {
+              if (loading) return;
+              if (isArchivedSection) restoreArchivedEvent(ev);
+              else resumeEvent(ev.id);
+            }}
+          >
+            <button
+              type="button"
+              aria-label={`Remove ${ev.name}`}
+              style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                background: 'transparent',
+                border: 'none',
+                padding: '4px',
+                cursor: 'pointer',
+                color: '#bbb',
+                zIndex: 2,
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEventCardAction(ev);
+              }}
+            >
+              <i className="ti ti-x" style={{ fontSize: '16px' }} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '14px',
+                background: colorWithAlpha(evColor, 0.12),
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <i className={`ti ${typeInfo?.tablerIcon || 'ti-plus'}`} style={{ fontSize: '22px', color: evColor }} />
+              </div>
+
+              <div style={{ flex: 1, minWidth: 0, paddingRight: '20px' }}>
+                <div style={{ fontSize: '15px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '2px' }}>
+                  {ev.name}
+                </div>
+                <div style={{ fontSize: '12px', color: '#888' }}>
+                  {welcomeEventSubtitle(ev)}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  background: isArchivedSection ? '#eeeae0' : done ? '#eeeae0' : colorWithAlpha(evColor, 0.12),
+                  color: isArchivedSection ? '#888' : done ? '#888' : evColor,
+                }}>
+                  {isArchivedSection ? 'Archived' : done ? 'Done' : 'Active'}
+                </span>
+                <i className="ti ti-chevron-right" style={{ fontSize: '18px', color: '#ccc' }} />
+              </div>
+            </div>
+
+            <div style={{ height: '4px', background: '#f0ede6', borderRadius: '999px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${progress}%`, background: evColor, borderRadius: '999px', transition: 'width 0.3s' }} />
+            </div>
+          </div>
+        );
+      };
 
       return (
       <div
@@ -1206,113 +1316,25 @@ export default function Helmr() {
         <div style={{ flex: 1, background: CREAM, padding: '20px 16px 24px' }}>
           <div style={DS.label}>Your events</div>
 
-          {welcomeEvents.length === 0 && (
+          {activeWelcomeEvents.length === 0 && (
             <p style={{ fontSize: '13px', color: '#888', margin: '8px 0 0' }}>
-              {hasArchivedEvents && !showArchived
-                ? 'No active events — toggle below to see archived ones.'
+              {hasArchivedEvents
+                ? 'No active events — show archived below.'
                 : 'No saved events yet — plan something new to get started.'}
             </p>
           )}
 
-          {welcomeEvents.map(ev => {
-            const evColor = getEventColor(ev.eventType);
-            const typeInfo = eventTypes.find(t => t.id === ev.eventType);
-            const done = isWelcomeEventDone(ev);
-            const progress = welcomeEventProgress(ev);
-            return (
-              <div
-                key={ev.id}
-                className="helmr-pressable"
-                style={{
-                  position: 'relative',
-                  background: 'white',
-                  borderRadius: '18px',
-                  border: `0.5px solid ${CARD_BORDER}`,
-                  padding: '16px',
-                  marginBottom: '10px',
-                  cursor: loading ? 'wait' : 'pointer',
-                }}
-                onClick={() => !loading && resumeEvent(ev.id)}
-              >
-                <button
-                  type="button"
-                  aria-label={`Remove ${ev.name}`}
-                  style={{
-                    position: 'absolute',
-                    top: '10px',
-                    right: '10px',
-                    background: 'transparent',
-                    border: 'none',
-                    padding: '4px',
-                    cursor: 'pointer',
-                    color: '#bbb',
-                    zIndex: 2,
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleEventCardAction(ev);
-                  }}
-                >
-                  <i className="ti ti-x" style={{ fontSize: '16px' }} />
-                </button>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                  <div style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '14px',
-                    background: colorWithAlpha(evColor, 0.12),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}>
-                    <i className={`ti ${typeInfo?.tablerIcon || 'ti-plus'}`} style={{ fontSize: '22px', color: evColor }} />
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: 0, paddingRight: '20px' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '2px' }}>
-                      {ev.name}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#888' }}>
-                      {welcomeEventSubtitle(ev)}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                    <span style={{
-                      fontSize: '11px',
-                      fontWeight: 500,
-                      padding: '4px 10px',
-                      borderRadius: '999px',
-                      background: ev.archived ? '#eeeae0' : done ? '#eeeae0' : colorWithAlpha(evColor, 0.12),
-                      color: ev.archived ? '#888' : done ? '#888' : evColor,
-                    }}>
-                      {ev.archived ? 'Archived' : done ? 'Done' : 'Active'}
-                    </span>
-                    <i className="ti ti-chevron-right" style={{ fontSize: '18px', color: '#ccc' }} />
-                  </div>
-                </div>
-
-                <div style={{ height: '4px', background: '#f0ede6', borderRadius: '999px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${progress}%`, background: evColor, borderRadius: '999px', transition: 'width 0.3s' }} />
-                </div>
-              </div>
-            );
-          })}
+          {activeWelcomeEvents.map(ev => renderWelcomeEventCard(ev, false))}
 
           {hasArchivedEvents && (
             <button
               type="button"
               onClick={() => setShowArchived(v => !v)}
               style={{
-                width: '100%',
-                marginTop: '8px',
-                padding: '10px 14px',
-                borderRadius: '999px',
-                border: `0.5px solid ${CARD_BORDER}`,
-                background: showArchived ? TEAL_LIGHT : 'white',
-                color: showArchived ? BRAND : '#666',
+                background: 'none',
+                border: 'none',
+                padding: '8px 0 4px',
+                color: BRAND,
                 fontSize: '13px',
                 fontWeight: 500,
                 cursor: 'pointer',
@@ -1321,6 +1343,13 @@ export default function Helmr() {
             >
               {showArchived ? 'Hide archived' : 'Show archived'}
             </button>
+          )}
+
+          {showArchived && hasArchivedEvents && (
+            <>
+              <div style={{ ...DS.label, marginTop: '12px', marginBottom: '8px', color: '#888' }}>Archived</div>
+              {archivedWelcomeEvents.map(ev => renderWelcomeEventCard(ev, true))}
+            </>
           )}
         </div>
       </div>
