@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getEvent, updateEvent } from '@/lib/events';
+import { getEvent, updateEvent, deleteEvent } from '@/lib/events';
 
 export const runtime = 'nodejs';
 
@@ -22,6 +22,17 @@ export async function PATCH(request, { params }) {
     return NextResponse.json(updated);
   } catch (err) {
     console.error('PATCH /api/events/[id] error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request, { params }) {
+  try {
+    const deleted = await deleteEvent(params.eventId);
+    if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error('DELETE /api/events/[id] error:', err);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

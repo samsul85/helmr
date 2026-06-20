@@ -624,52 +624,49 @@ export default function Helmr() {
     showToast('Coming soon — activity feed');
   };
 
-  const removeSavedEvent = async (ev) => {
-    if (await dlg.confirm('Remove from your list? The event link still works for guests.')) {
-      removeEventFromLocal(ev.id);
-      setSavedEvents(prev => prev.filter(x => x.id !== ev.id));
-    }
-  };
-
-  const archiveEvent = async () => {
-    if (!eventId) return;
-    const confirmed = await dlg.confirm(
-      'Archive this event? It will be hidden from your list but guest links will still work. You can restore it later using the event ID.',
-      'Archive this event?',
-      { confirmLabel: 'Archive' },
+  const handleEventCardAction = async (ev) => {
+    const choice = await dlg.choice(
+      'What would you like to do?',
+      'Choose how to handle this event.',
+      [
+        { id: 'archive', label: 'Archive', variant: 'primary' },
+        { id: 'delete', label: 'Delete permanently', variant: 'danger-outline' },
+        { id: 'cancel', label: 'Cancel', variant: 'ghost' },
+      ],
     );
-    if (!confirmed) return;
-    try {
-      setSaving(true);
-      const res = await fetch(`/api/events/${eventId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived: true }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      const prev = loadSavedEvents().find(e => e.id === eventId);
-      const guests = people.filter(p => p.role !== 'organizer');
-      saveEventToLocal({
-        id: eventId,
-        name: eventName || prev?.name || 'Untitled event',
-        eventType: eventType || prev?.eventType || 'other',
-        mode,
-        responseDeadline: datetimeLocalToIso(responseDeadline) || prev?.responseDeadline || '',
-        total: expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0),
-        pooled: people.reduce((s, p) => s + (Number(p.contributedAmount) || 0), 0),
-        goal: Number(goal) || 0,
-        paidCount: guests.filter(p => p.status === 'paid').length,
-        guestCount: guests.length,
-        archived: true,
-        updatedAt: Date.now(),
-      });
-      setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
-      setEventId(null);
-      navigateToScreen('welcome', 'back');
-    } catch {
-      await dlg.alert("Couldn't archive event. Please try again.");
-    } finally {
-      setSaving(false);
+    if (!choice || choice === 'cancel') return;
+
+    if (choice === 'archive') {
+      try {
+        const res = await fetch(`/api/events/${ev.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ archived: true }),
+        });
+        if (!res.ok) throw new Error('Failed');
+        removeEventFromLocal(ev.id);
+        setSavedEvents(prev => prev.filter(x => x.id !== ev.id));
+      } catch {
+        await dlg.alert("Couldn't archive event. Please try again.");
+      }
+      return;
+    }
+
+    if (choice === 'delete') {
+      const confirmed = await dlg.confirm(
+        'This will delete all event data and guest links will stop working. This cannot be undone.',
+        '',
+        { confirmLabel: 'Delete', confirmVariant: 'danger' },
+      );
+      if (!confirmed) return;
+      try {
+        const res = await fetch(`/api/events/${ev.id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed');
+        removeEventFromLocal(ev.id);
+        setSavedEvents(prev => prev.filter(x => x.id !== ev.id));
+      } catch {
+        await dlg.alert("Couldn't delete event. Please try again.");
+      }
     }
   };
 
@@ -1253,7 +1250,7 @@ export default function Helmr() {
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    removeSavedEvent(ev);
+                    handleEventCardAction(ev);
                   }}
                 >
                   <i className="ti ti-x" style={{ fontSize: '16px' }} />
@@ -2423,34 +2420,6 @@ export default function Helmr() {
               <p style={{ fontSize: '12px', color: '#777', margin: '0 0 8px' }}>Propose a gift; requires organizer approval</p>
               <button style={DS.btn} onClick={async () => { await dlg.alert('Surprise gift flow — propose a gift, organizer approves before it shows up to other guests.'); }}>+ Propose surprise gift</button>
             </div>
-
-            <button
-              type="button"
-              onClick={archiveEvent}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                background: 'white',
-                border: `0.5px solid ${CARD_BORDER}`,
-                borderRadius: '14px',
-                padding: '14px',
-                cursor: 'pointer',
-                fontFamily: FONT,
-                textAlign: 'left',
-                marginBottom: '10px',
-              }}
-            >
-              <i className="ti ti-archive" style={{ fontSize: '20px', color: BRAND, flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 500, fontSize: '15px', color: '#1a1a1a', marginBottom: '2px' }}>Archive event</div>
-                <p style={{ fontSize: '12px', color: '#888', margin: 0 }}>
-                  Hide from your list, guest links still work
-                </p>
-              </div>
-              <i className="ti ti-chevron-right" style={{ fontSize: '18px', color: '#ccc', flexShrink: 0 }} />
-            </button>
           </div>
         )}
         </div>

@@ -50,6 +50,29 @@ const btnCancel = {
   fontFamily: FONT,
 };
 
+const btnDanger = {
+  flex: 1,
+  padding: '14px 16px',
+  borderRadius: '999px',
+  border: 'none',
+  background: '#E8645A',
+  color: 'white',
+  fontSize: '15px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontFamily: FONT,
+};
+
+const btnStackBase = {
+  width: '100%',
+  padding: '14px 16px',
+  borderRadius: '999px',
+  fontSize: '15px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontFamily: FONT,
+};
+
 export default function AppDialog({ dialog, onClose }) {
   const [promptValue, setPromptValue] = useState('');
 
@@ -80,11 +103,38 @@ export default function AppDialog({ dialog, onClose }) {
   );
 
   const isSingleButton = dialog.type === 'alert';
+  const isChoice = dialog.type === 'choice';
+  const confirmBtnStyle = dialog.confirmVariant === 'danger'
+    ? btnDanger
+    : btnPrimary;
+
+  const handleOverlayClick = () => {
+    if (isSingleButton) handleConfirm();
+    else if (isChoice) {
+      dialog.onSelect?.(null);
+      onClose();
+    } else handleCancel();
+  };
+
+  const handleChoice = (id) => {
+    dialog.onSelect?.(id);
+    onClose();
+  };
+
+  const choiceBtnStyle = (variant) => {
+    if (variant === 'primary') {
+      return { ...btnStackBase, border: 'none', background: BRAND, color: 'white' };
+    }
+    if (variant === 'danger-outline') {
+      return { ...btnStackBase, border: '1.5px solid #E8645A', background: 'white', color: '#E8645A', fontWeight: 500 };
+    }
+    return { ...btnStackBase, border: 'none', background: '#f5f3ee', color: '#666', fontWeight: 500 };
+  };
 
   return (
     <div
       style={overlayStyle}
-      onClick={isSingleButton ? handleConfirm : handleCancel}
+      onClick={handleOverlayClick}
     >
       <div style={cardStyle} onClick={e => e.stopPropagation()}>
         {dialog.title && (
@@ -107,6 +157,20 @@ export default function AppDialog({ dialog, onClose }) {
           />
         )}
 
+        {isChoice ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {(dialog.actions || []).map(action => (
+              <button
+                key={action.id}
+                type="button"
+                style={choiceBtnStyle(action.variant)}
+                onClick={() => handleChoice(action.id)}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        ) : (
         <div style={{ display: 'flex', gap: '10px' }}>
           {!isSingleButton && (
             <button type="button" style={btnCancel} onClick={handleCancel}>
@@ -115,12 +179,13 @@ export default function AppDialog({ dialog, onClose }) {
           )}
           <button
             type="button"
-            style={{ ...btnPrimary, ...(isSingleButton ? { width: '100%', flex: undefined } : {}) }}
+            style={{ ...confirmBtnStyle, ...(isSingleButton ? { width: '100%', flex: undefined } : {}) }}
             onClick={handleConfirm}
           >
             {confirmLabel}
           </button>
         </div>
+        )}
       </div>
     </div>
   );
@@ -142,8 +207,18 @@ export function createDialogHelpers(setDialog) {
         title,
         message,
         confirmLabel: options.confirmLabel || 'Confirm',
+        confirmVariant: options.confirmVariant || 'primary',
         onConfirm: () => resolve(true),
         onCancel: () => resolve(false),
+      });
+    }),
+    choice: (title, message, actions) => new Promise(resolve => {
+      setDialog({
+        type: 'choice',
+        title,
+        message,
+        actions,
+        onSelect: resolve,
       });
     }),
     prompt: (message, defaultValue = '', title = '') => new Promise(resolve => {
