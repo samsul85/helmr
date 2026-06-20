@@ -129,6 +129,15 @@ export default function UpgradeModal({ open, onClose, email }) {
 
   if (!open) return null;
 
+  const isYearly = planInterval === 'yearly';
+  const proPrice = isYearly ? 60 : 7;
+  const proPeriod = isYearly ? '/year' : '/mo';
+  const upgradeLabel = loading
+    ? 'Redirecting…'
+    : isYearly
+      ? 'Upgrade now — $60/year'
+      : 'Upgrade now — $7/mo';
+
   return (
     <div style={S.modalOverlay} onClick={onClose}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
@@ -190,8 +199,11 @@ export default function UpgradeModal({ open, onClose, email }) {
           }}>
             <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '10px', color: BRAND }}>Pro</div>
             <div style={{ marginBottom: '8px', color: BRAND }}>
-              <span style={{ fontSize: '32px', fontWeight: 700 }}>$7</span>
-              <span style={{ fontSize: '14px', fontWeight: 500 }}>/mo</span>
+              <span style={{ fontSize: '32px', fontWeight: 700 }}>${proPrice}</span>
+              <span style={{ fontSize: '14px', fontWeight: 500 }}>{proPeriod}</span>
+              {isYearly && (
+                <span style={{ fontSize: '14px', fontWeight: 500, color: AMBER }}> · Save 29%</span>
+              )}
             </div>
             <div style={{ fontSize: '12px', color: '#085041', lineHeight: 1.5 }}>
               Unlimited events
@@ -246,7 +258,7 @@ export default function UpgradeModal({ open, onClose, email }) {
           onClick={startCheckout}
           disabled={loading}
         >
-          {loading ? 'Redirecting…' : 'Upgrade now'}
+          {upgradeLabel}
         </button>
         <button type="button" style={S.btnGhost} onClick={onClose} disabled={loading}>
           Maybe later
