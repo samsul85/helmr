@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabase';
+import { BRAND, FONT, TEAL_LIGHT } from '@/lib/design';
+
+const AMBER = '#F5A623';
 
 const S = {
   modalOverlay: {
@@ -13,52 +16,54 @@ const S = {
     justifyContent: 'center',
     padding: '20px',
     zIndex: 200,
+    fontFamily: FONT,
   },
   modal: {
     background: 'white',
-    borderRadius: '16px',
-    padding: '20px',
-    maxWidth: '420px',
+    borderRadius: '20px',
+    padding: '28px',
+    maxWidth: '380px',
     width: '100%',
   },
   btnGhost: {
     background: 'transparent',
     border: 'none',
-    color: '#666',
-    fontSize: '13px',
+    color: '#888',
+    fontSize: '14px',
     padding: '8px',
+    marginTop: '16px',
     cursor: 'pointer',
-    fontFamily: 'inherit',
+    fontFamily: FONT,
     width: '100%',
   },
   btnTeal: {
     width: '100%',
-    padding: '14px',
-    borderRadius: '10px',
+    padding: '18px',
+    borderRadius: '999px',
     border: 'none',
-    background: '#0F6E56',
+    background: BRAND,
     color: 'white',
     cursor: 'pointer',
-    fontSize: '15px',
-    fontWeight: 500,
-    fontFamily: 'inherit',
-  },
-  planOption: {
-    width: '100%',
-    padding: '14px 16px',
-    borderRadius: '12px',
-    border: '0.5px solid #ddd',
-    background: 'white',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    textAlign: 'left',
-    marginBottom: '10px',
-  },
-  planOptionSelected: {
-    border: '2px solid #0F6E56',
-    background: '#f0faf7',
+    fontSize: '16px',
+    fontWeight: 600,
+    fontFamily: FONT,
   },
 };
+
+function pillToggle(active) {
+  return {
+    flex: 1,
+    padding: '12px 16px',
+    borderRadius: '999px',
+    border: active ? 'none' : '0.5px solid #ccc',
+    background: active ? BRAND : 'white',
+    color: active ? 'white' : '#666',
+    cursor: 'pointer',
+    fontFamily: FONT,
+    fontSize: '14px',
+    fontWeight: 500,
+  };
+}
 
 export default function UpgradeModal({ open, onClose, email }) {
   const [planInterval, setPlanInterval] = useState('monthly');
@@ -97,11 +102,6 @@ export default function UpgradeModal({ open, onClose, email }) {
         return;
       }
 
-      console.error('[UpgradeModal] starting checkout', {
-        planInterval,
-        email: checkoutEmail,
-      });
-
       const res = await fetch(`${window.location.origin}/api/stripe/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -132,37 +132,68 @@ export default function UpgradeModal({ open, onClose, email }) {
   return (
     <div style={S.modalOverlay} onClick={onClose}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-          <img src="/logo.svg" alt="Helmr" style={{ height: '48px', width: 'auto' }} />
+        <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+          <img src="/logo.svg" alt="" style={{ height: '48px', width: 'auto', display: 'block', margin: '0 auto' }} />
         </div>
-        <h2 style={{ margin: '0 0 16px', fontSize: '22px', fontWeight: 500, textAlign: 'center' }}>
+        <div style={{
+          textAlign: 'center',
+          fontSize: '16px',
+          fontWeight: 600,
+          color: BRAND,
+          marginBottom: '24px',
+        }}>
+          helmr
+        </div>
+
+        <h2 style={{
+          margin: '0 0 8px',
+          fontSize: '28px',
+          fontWeight: 700,
+          letterSpacing: '-0.02em',
+          textAlign: 'center',
+          color: '#1a1a1a',
+        }}>
           Upgrade to Pro
         </h2>
+        <p style={{
+          margin: '0 0 28px',
+          fontSize: '14px',
+          color: '#666',
+          textAlign: 'center',
+        }}>
+          Unlock unlimited events
+        </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
-          <div style={{ border: '0.5px solid #eee', borderRadius: '12px', padding: '14px 10px', textAlign: 'center' }}>
-            <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Free</div>
-            <div style={{ fontSize: '20px', fontWeight: 500, marginBottom: '4px' }}>$0</div>
-            <div style={{ fontSize: '11px', color: '#777', lineHeight: 1.45 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '24px' }}>
+          <div style={{
+            border: '0.5px solid #ddd',
+            borderRadius: '16px',
+            padding: '20px',
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '10px', color: '#888' }}>Free</div>
+            <div style={{ marginBottom: '8px', color: '#888' }}>
+              <span style={{ fontSize: '32px', fontWeight: 700 }}>$0</span>
+            </div>
+            <div style={{ fontSize: '12px', color: '#999', lineHeight: 1.5 }}>
               1 event
               <br />
               All features
             </div>
           </div>
           <div style={{
-            border: '2px solid #0F6E56',
-            borderRadius: '12px',
-            padding: '14px 10px',
+            border: `2px solid ${BRAND}`,
+            borderRadius: '16px',
+            padding: '20px',
             textAlign: 'center',
-            background: '#f0faf7',
+            background: TEAL_LIGHT,
           }}>
-            <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: '#0F6E56' }}>Pro</div>
-            <div style={{ fontSize: '20px', fontWeight: 500, marginBottom: '4px', color: '#0F6E56' }}>
-              $7<span style={{ fontSize: '12px', fontWeight: 400 }}>/mo</span>
+            <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '10px', color: BRAND }}>Pro</div>
+            <div style={{ marginBottom: '8px', color: BRAND }}>
+              <span style={{ fontSize: '32px', fontWeight: 700 }}>$7</span>
+              <span style={{ fontSize: '14px', fontWeight: 500 }}>/mo</span>
             </div>
-            <div style={{ fontSize: '11px', color: '#085041', lineHeight: 1.45 }}>
-              or $60/year
-              <br />
+            <div style={{ fontSize: '12px', color: '#085041', lineHeight: 1.5 }}>
               Unlimited events
               <br />
               All features
@@ -170,37 +201,36 @@ export default function UpgradeModal({ open, onClose, email }) {
           </div>
         </div>
 
-        <div style={{ marginBottom: '16px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
           <button
             type="button"
-            style={{
-              ...S.planOption,
-              ...(planInterval === 'monthly' ? S.planOptionSelected : {}),
-            }}
+            style={pillToggle(planInterval === 'monthly')}
             onClick={() => setPlanInterval('monthly')}
             disabled={loading}
           >
-            <div style={{ fontSize: '14px', fontWeight: 500, color: planInterval === 'monthly' ? '#0F6E56' : '#1a1a1a' }}>
-              Monthly
-            </div>
-            <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>$7/month</div>
+            Monthly
           </button>
           <button
             type="button"
-            style={{
-              ...S.planOption,
-              ...(planInterval === 'yearly' ? S.planOptionSelected : {}),
-              marginBottom: 0,
-            }}
+            style={{ ...pillToggle(planInterval === 'yearly'), position: 'relative' }}
             onClick={() => setPlanInterval('yearly')}
             disabled={loading}
           >
-            <div style={{ fontSize: '13px', fontWeight: 500, color: planInterval === 'yearly' ? '#0F6E56' : '#1a1a1a' }}>
-              Yearly
-            </div>
-            <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
-              $60/year <span style={{ color: '#0F6E56' }}>· save 29%</span>
-            </div>
+            Yearly
+            <span style={{
+              position: 'absolute',
+              top: '-8px',
+              right: '-4px',
+              fontSize: '10px',
+              fontWeight: 600,
+              color: 'white',
+              background: AMBER,
+              padding: '2px 6px',
+              borderRadius: '999px',
+              lineHeight: 1.3,
+            }}>
+              Save 29%
+            </span>
           </button>
         </div>
 
@@ -212,7 +242,7 @@ export default function UpgradeModal({ open, onClose, email }) {
 
         <button
           type="button"
-          style={{ ...S.btnTeal, marginBottom: '8px', opacity: loading ? 0.7 : 1 }}
+          style={{ ...S.btnTeal, opacity: loading ? 0.7 : 1 }}
           onClick={startCheckout}
           disabled={loading}
         >
