@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { BRAND, CARD_BORDER, FONT } from '@/lib/design';
 
 const NAV_ITEMS = {
@@ -12,6 +13,8 @@ const NAV_ITEMS = {
 };
 
 export default function BottomNav({ activeTab, isWelcome, onHome, onProfile, onActivity, onTabChange, onNewEvent, profileOpen }) {
+  const [tappedId, setTappedId] = useState(null);
+
   const leftItems = isWelcome
     ? [NAV_ITEMS.profile]
     : [NAV_ITEMS.home, NAV_ITEMS.guests];
@@ -19,6 +22,12 @@ export default function BottomNav({ activeTab, isWelcome, onHome, onProfile, onA
   const rightItems = isWelcome
     ? [NAV_ITEMS.activity]
     : [NAV_ITEMS.expenses, NAV_ITEMS.settings];
+
+  const handleTap = (itemId, action) => {
+    setTappedId(itemId);
+    setTimeout(() => setTappedId(null), 150);
+    action();
+  };
 
   const renderItem = (item) => {
     const isActive = item.id === 'profile'
@@ -33,11 +42,13 @@ export default function BottomNav({ activeTab, isWelcome, onHome, onProfile, onA
               ? activeTab === 'extras'
               : activeTab === item.id;
 
+    const isTapped = tappedId === item.id;
+
     const onClick = () => {
-      if (item.id === 'profile') onProfile();
-      else if (item.id === 'home') onHome();
-      else if (item.id === 'activity') onActivity();
-      else onTabChange(item.id);
+      if (item.id === 'profile') handleTap(item.id, onProfile);
+      else if (item.id === 'home') handleTap(item.id, onHome);
+      else if (item.id === 'activity') handleTap(item.id, onActivity);
+      else handleTap(item.id, () => onTabChange(item.id));
     };
 
     return (
@@ -45,6 +56,7 @@ export default function BottomNav({ activeTab, isWelcome, onHome, onProfile, onA
         key={item.id}
         type="button"
         onClick={onClick}
+        className="helmr-pressable"
         style={{
           background: 'none',
           border: 'none',
@@ -57,8 +69,21 @@ export default function BottomNav({ activeTab, isWelcome, onHome, onProfile, onA
           minWidth: 0,
         }}
       >
-        <i className={`ti ${item.icon}`} style={{ fontSize: '20px', display: 'block', marginBottom: '2px' }} />
-        <div style={{ fontSize: '10px', fontWeight: isActive ? 600 : 400 }}>{item.label}</div>
+        <i
+          className={`ti ${item.icon}${isTapped ? ' helmr-nav-icon-pop' : ''}`}
+          style={{ fontSize: '20px', display: 'block', marginBottom: '2px' }}
+        />
+        <div
+          className={isTapped || isActive ? 'helmr-nav-label-active' : undefined}
+          style={{
+            fontSize: '10px',
+            fontWeight: isActive ? 600 : 400,
+            transition: 'color 150ms ease-out',
+            color: isActive ? BRAND : '#aaa',
+          }}
+        >
+          {item.label}
+        </div>
       </button>
     );
   };
@@ -87,8 +112,9 @@ export default function BottomNav({ activeTab, isWelcome, onHome, onProfile, onA
 
       <button
         type="button"
-        onClick={onNewEvent}
+        onClick={() => handleTap('plus', onNewEvent)}
         aria-label="Plan new event"
+        className="helmr-pressable"
         style={{
           width: '52px',
           height: '52px',
@@ -108,7 +134,7 @@ export default function BottomNav({ activeTab, isWelcome, onHome, onProfile, onA
           justifyContent: 'center',
         }}
       >
-        <i className="ti ti-plus" style={{ fontSize: '24px' }} />
+        <i className={`ti ti-plus${tappedId === 'plus' ? ' helmr-nav-icon-pop' : ''}`} style={{ fontSize: '24px' }} />
       </button>
 
       <div style={{ display: 'flex', flex: 1, justifyContent: isWelcome ? 'flex-end' : 'space-around' }}>

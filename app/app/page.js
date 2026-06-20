@@ -6,6 +6,14 @@ import AppDialog, { createDialogHelpers } from '../../components/AppDialog';
 import BottomNav from '../../components/BottomNav';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
 import { BRAND, CREAM, DS, getEventColor, STATUS_STYLES, FONT, TEAL_LIGHT, TEXT_DARK, CARD_BORDER } from '../../lib/design';
+import {
+  HELMR_ANIMATION_CSS,
+  SCREEN_ORDER,
+  useCountUp,
+  useAnimatedWidth,
+  SkeletonEventCards,
+  SuccessOverlay,
+} from '../../lib/helmrAnimations';
 
 // ============ CONFIG ============
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mredzlyn';
@@ -421,6 +429,8 @@ function ShareModal({ open, onClose, event }) {
 
 export default function Helmr() {
   const [screen, setScreen] = useState('welcome');
+  const [navDirection, setNavDirection] = useState('forward');
+  const [successOverlay, setSuccessOverlay] = useState(false);
   const [eventId, setEventId] = useState(null);
   const [eventType, setEventType] = useState(null);
   const [eventName, setEventName] = useState('');
@@ -472,6 +482,22 @@ export default function Helmr() {
   const [bellDismissed, setBellDismissed] = useState(false);
   const [bellAnimTick, setBellAnimTick] = useState(0);
   const showBellBadge = savedEvents.length > 0 && !bellDismissed;
+  const welcomeScrollRef = useRef(null);
+  const pullStartY = useRef(0);
+  const welcomeAtTop = useRef(true);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const navigateToScreen = (target, direction) => {
+    if (direction) {
+      setNavDirection(direction);
+    } else {
+      const cur = SCREEN_ORDER[screen] ?? 0;
+      const next = SCREEN_ORDER[target] ?? 0;
+      setNavDirection(next >= cur ? 'forward' : 'back');
+    }
+    setScreen(target);
+  };
 
   const refreshSavedEvents = () => {
     const events = loadSavedEvents().map(normalizeSavedEvent).filter(Boolean);
@@ -571,6 +597,52 @@ export default function Helmr() {
     .reduce((s, p) => s + (Number(p.contributedAmount) || 0), 0);
   const contributorCount = people.filter(p => Number(p.contributedAmount) > 0).length;
   const inviteeCount = people.filter(p => p.role !== 'organizer').length;
+  const guestListForProgress = people.filter(p => p.role !== 'organizer');
+  const paidCountForProgress = guestListForProgress.filter(p => p.status === 'paid').length;
+  const paymentProgressPct = guestListForProgress.length > 0
+    ? Math.round((paidCountForProgress / guestListForProgress.length) * 100)
+    : 0;
+  const goalNumForProgress = Number(goal) || 0;
+  const fundedPctForProgress = goalNumForProgress > 0
+    ? Math.min(100, Math.round((pooledTotal / goalNumForProgress) * 100))
+    : 0;
+
+  const dashboardHomeActive = screen === 'dashboard' && tab === 'home';
+  const animatedTotal = useCountUp(total, dashboardHomeActive && mode === 'cost_split');
+  const animatedPooled = useCountUp(pooledTotal, dashboardHomeActive && mode === 'open_pool');
+  const animatedPerPerson = useCountUp(perPerson, dashboardHomeActive && mode === 'cost_split' && !sharesVary);
+  const animatedMinShare = useCountUp(minShare, dashboardHomeActive && mode === 'cost_split' && sharesVary);
+  const animatedMaxShare = useCountUp(maxShare, dashboardHomeActive && mode === 'cost_split' && sharesVary);
+  const paymentBar = useAnimatedWidth(
+    paymentProgressPct,
+    dashboardHomeActive && mode === 'cost_split' && guestListForProgress.length > 0,
+  );
+  const poolBar = useAnimatedWidth(
+    fundedPctForProgress,
+    dashboardHomeActive && mode === 'open_pool' && goalNumForProgress > 0,
+  );
+
+  const onWelcomeTouchStart = (e) => {
+    if (screen !== 'welcome' || refreshing) return;
+    const scrollEl = welcomeScrollRef.current;
+    welcomeAtTop.current = !scrollEl || scrollEl.scrollTop <= 0;
+    if (welcomeAtTop.current) pullStartY.current = e.touches[0].clientY;
+  };
+
+  const onWelcomeTouchMove = (e) => {
+    if (screen !== 'welcome' || !welcomeAtTop.current || refreshing) return;
+    const dy = e.touches[0].clientY - pullStartY.current;
+    if (dy > 0) setPullDistance(Math.min(dy, 100));
+  };
+
+  const onWelcomeTouchEnd = () => {
+    if (pullDistance > 60 && !refreshing) {
+      setRefreshing(true);
+      refreshSavedEvents();
+      setTimeout(() => setRefreshing(false), 600);
+    }
+    setPullDistance(0);
+  };
 
   // Deadline helpers: parse the datetime-local string into a JS Date.
   // Empty string = no deadline. Passed = closed.
@@ -636,7 +708,7 @@ export default function Helmr() {
         updatedAt: Date.now(),
       });
       setTab(initialTab);
-      setScreen('dashboard');
+      navigateToScreen('dashboard', 'forward');
     } catch {
       await dlg.alert("Couldn't load event.");
     } finally {
@@ -771,7 +843,7 @@ export default function Helmr() {
       if (t.id === 'potluck') setSuggestionUnit('per kid');
       else setSuggestionUnit('per person');
     }
-    setScreen('details');
+    navigateToScreen('details', 'forward');
   };
 
   // Reset all event state so "Plan something new" starts from a clean slate.
@@ -804,7 +876,7 @@ export default function Helmr() {
     setExpenses([]);
     setPeople([{ id: 'organizer', name: organizerName || 'You', status: 'paid', role: 'organizer' }]);
     setTab('home');
-    setScreen('chooseType');
+    navigateToScreen('chooseType', 'forward');
   };
 
   const cycleStatus = (id) => {
@@ -877,7 +949,11 @@ export default function Helmr() {
         updatedAt: Date.now(),
       });
       setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
-      setScreen('dashboard');
+      setSuccessOverlay(true);
+      setTimeout(() => {
+        setSuccessOverlay(false);
+        navigateToScreen('dashboard', 'forward');
+      }, 1000);
     } catch (e) {
       await dlg.alert("Couldn't save event — please try again.");
     } finally {
@@ -897,7 +973,21 @@ export default function Helmr() {
       );
 
       return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', paddingBottom: '100px' }}>
+      <div
+        ref={welcomeScrollRef}
+        onTouchStart={onWelcomeTouchStart}
+        onTouchMove={onWelcomeTouchMove}
+        onTouchEnd={onWelcomeTouchEnd}
+        style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', paddingBottom: '100px', overflow: 'auto', WebkitOverflowScrolling: 'touch' }}
+      >
+        {(pullDistance > 0 || refreshing) && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: `${Math.min(pullDistance, 60) * 0.4}px 0 8px` }}>
+            <i
+              className={`ti ti-loader-2${refreshing ? ' helmr-pull-spinner' : ''}`}
+              style={{ fontSize: '22px', color: BRAND, opacity: refreshing || pullDistance > 60 ? 1 : 0.5 }}
+            />
+          </div>
+        )}
         <div style={{
           background: TEAL_LIGHT,
           padding: '48px 24px 32px',
@@ -1000,6 +1090,7 @@ export default function Helmr() {
             return (
               <div
                 key={ev.id}
+                className="helmr-pressable"
                 style={{
                   position: 'relative',
                   background: 'white',
@@ -1092,6 +1183,7 @@ export default function Helmr() {
             return (
               <div
                 key={e.id}
+                className="helmr-pressable"
                 onClick={() => pickType(e.id)}
                 style={{
                   aspectRatio: '1',
@@ -1119,7 +1211,7 @@ export default function Helmr() {
           <div style={{ background: BRAND, color: 'white', padding: '16px 20px 20px' }}>
             <button
               type="button"
-              onClick={() => setScreen('welcome')}
+              onClick={() => navigateToScreen('welcome', 'back')}
               style={{ background: 'none', border: 'none', color: 'white', padding: '4px 0', marginBottom: '8px', cursor: 'pointer', fontFamily: FONT, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
               <i className="ti ti-arrow-left" style={{ fontSize: '18px' }} /> Back
@@ -1166,7 +1258,7 @@ export default function Helmr() {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: '85vh', background: CREAM }}>
           <div style={{ background: accent, color: 'white', padding: '16px 20px' }}>
-            <button type="button" onClick={() => setScreen('chooseType')} style={{ background: 'none', border: 'none', color: 'white', padding: '4px 0', marginBottom: '12px', cursor: 'pointer', fontFamily: FONT, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button type="button" onClick={() => navigateToScreen('chooseType', 'back')} style={{ background: 'none', border: 'none', color: 'white', padding: '4px 0', marginBottom: '12px', cursor: 'pointer', fontFamily: FONT, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <i className="ti ti-arrow-left" style={{ fontSize: '18px' }} /> Back
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -1278,7 +1370,7 @@ export default function Helmr() {
           <button
             type="button"
             aria-label="Back to events"
-            onClick={() => setScreen('welcome')}
+            onClick={() => navigateToScreen('welcome', 'back')}
             style={{ background: 'none', border: 'none', color: 'white', padding: '4px', cursor: 'pointer', display: 'flex' }}
           >
             <i className="ti ti-arrow-left" style={{ fontSize: '20px' }} />
@@ -1331,11 +1423,13 @@ export default function Helmr() {
                 <span style={{ fontSize: '28px' }}>{typeInfo?.icon || '📋'}</span>
               </div>
               <div style={{ fontSize: '13px', opacity: 0.85, marginBottom: '4px' }}>Total cost</div>
-              <div style={{ ...DS.statNumber, color: 'white', marginBottom: '16px' }}>${total.toLocaleString()}</div>
+              <div style={{ ...DS.statNumber, color: 'white', marginBottom: '16px' }}>${animatedTotal.toLocaleString()}</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '12px', padding: '12px' }}>
                   <div style={{ fontSize: '11px', opacity: 0.85, marginBottom: '4px' }}>{sharesVary ? 'Avg/person' : 'Per person'}</div>
-                  <div style={{ fontSize: '18px', fontWeight: 600 }}>${sharesVary ? `${minShare}–${maxShare}` : perPerson}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 600 }}>
+                    ${sharesVary ? `${animatedMinShare.toLocaleString()}–${animatedMaxShare.toLocaleString()}` : animatedPerPerson.toLocaleString()}
+                  </div>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '12px', padding: '12px' }}>
                   <div style={{ fontSize: '11px', opacity: 0.85, marginBottom: '4px' }}>Confirmed</div>
@@ -1351,6 +1445,9 @@ export default function Helmr() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <div style={{ fontSize: '15px', fontWeight: 500 }}>Payment progress</div>
                   <div style={{ fontSize: '13px', color: '#888' }}>{paidCount} of {guestList.length} paid</div>
+                </div>
+                <div style={{ height: '6px', background: '#f0ede6', borderRadius: '999px', overflow: 'hidden', marginBottom: '12px' }}>
+                  <div style={{ height: '100%', width: `${paymentBar.width}%`, background: BRAND, borderRadius: '999px', transition: paymentBar.transition }} />
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {guestList.map(p => {
@@ -1397,6 +1494,7 @@ export default function Helmr() {
               return (
                 <div
                   key={p.id}
+                  className="helmr-pressable"
                   onClick={() => cycleStatus(p.id)}
                   style={{
                     background: 'white',
@@ -1468,13 +1566,13 @@ export default function Helmr() {
               </div>
               <div style={{ fontSize: '13px', opacity: 0.85, marginBottom: '4px' }}>Pooled so far</div>
               <div style={{ ...DS.statNumber, color: 'white' }}>
-                ${pooledTotal.toLocaleString()}
+                ${animatedPooled.toLocaleString()}
                 {goalNum > 0 && <span style={{ fontSize: '18px', fontWeight: 400, opacity: 0.85 }}> of ${goalNum.toLocaleString()}</span>}
               </div>
               {goalNum > 0 && (
                 <>
                   <div style={{ height: '6px', background: 'rgba(255,255,255,0.35)', borderRadius: '999px', marginTop: '14px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${fundedPct}%`, background: 'white', borderRadius: '999px' }} />
+                    <div style={{ height: '100%', width: `${poolBar.width}%`, background: 'white', borderRadius: '999px', transition: poolBar.transition }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '13px', opacity: 0.9 }}>
                     <span>{fundedPct}% funded</span>
@@ -2097,6 +2195,7 @@ export default function Helmr() {
   return (
     <div style={DS.page}>
       <style>{`
+        ${HELMR_ANIMATION_CSS}
         @keyframes helmr-bell-jiggle {
           0% { transform: rotate(0deg) scale(1); }
           20% { transform: rotate(-15deg) scale(1.1); }
@@ -2106,12 +2205,32 @@ export default function Helmr() {
           100% { transform: rotate(0deg) scale(1); }
         }
       `}</style>
+      <SuccessOverlay visible={successOverlay} />
       <div style={DS.frame}>
-        {screen === 'dashboard' ? (
-          <div style={DS.screenBody}>{renderScreen()}</div>
-        ) : (
-          <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>{renderScreen()}</div>
-        )}
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {loading ? (
+            <SkeletonEventCards />
+          ) : (
+            <div
+              key={screen}
+              className={navDirection === 'forward' ? 'helmr-screen-forward' : 'helmr-screen-back'}
+              style={{
+                flex: 1,
+                overflow: screen === 'dashboard' ? 'hidden' : (screen === 'welcome' ? 'hidden' : 'auto'),
+                WebkitOverflowScrolling: 'touch',
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: 0,
+              }}
+            >
+              {screen === 'dashboard' ? (
+                <div style={DS.screenBody}>{renderScreen()}</div>
+              ) : (
+                renderScreen()
+              )}
+            </div>
+          )}
+        </div>
       </div>
       {(screen === 'welcome' || screen === 'dashboard') && (
         <BottomNav
@@ -2119,7 +2238,7 @@ export default function Helmr() {
           isWelcome={screen === 'welcome'}
           profileOpen={profileOpen}
           onProfile={() => setProfileOpen(true)}
-          onHome={() => setScreen('welcome')}
+          onHome={() => navigateToScreen('welcome', 'back')}
           onActivity={() => alert('Coming soon')}
           onTabChange={(tabId) => {
             if (screen !== 'dashboard') return;
