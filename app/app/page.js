@@ -467,6 +467,11 @@ export default function Helmr() {
 
   const [savedEvents, setSavedEvents] = useState([]);
   const skipNextOrganizerNameSaveRef = useRef(false);
+  const toastTimerRef = useRef(null);
+  const [toast, setToast] = useState(null);
+  const [bellDismissed, setBellDismissed] = useState(false);
+  const [bellAnimTick, setBellAnimTick] = useState(0);
+  const showBellBadge = savedEvents.length > 0 && !bellDismissed;
 
   const refreshSavedEvents = () => {
     const events = loadSavedEvents().map(normalizeSavedEvent).filter(Boolean);
@@ -494,6 +499,24 @@ export default function Helmr() {
   useEffect(() => {
     if (screen === 'welcome') refreshSavedEvents();
   }, [screen]);
+
+  useEffect(() => {
+    if (!showBellBadge) return;
+    setBellAnimTick(t => t + 1);
+    const id = setInterval(() => setBellAnimTick(t => t + 1), 5000);
+    return () => clearInterval(id);
+  }, [showBellBadge]);
+
+  const showToast = (message) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(message);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleBellClick = () => {
+    if (showBellBadge) setBellDismissed(true);
+    showToast('Coming soon — activity feed');
+  };
 
   const removeSavedEvent = async (ev) => {
     if (await dlg.confirm(`Remove "${ev.name}" from this list? (The event itself isn't deleted.)`)) {
@@ -883,8 +906,38 @@ export default function Helmr() {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
             <span style={{ fontSize: '20px', fontWeight: 600, color: BRAND, letterSpacing: '-0.01em' }}>helmr</span>
-            <button type="button" aria-label="Notifications" style={{ background: 'none', border: 'none', padding: '4px', cursor: 'pointer' }}>
-              <i className="ti ti-bell" style={{ fontSize: '22px', color: BRAND }} />
+            <button
+              type="button"
+              aria-label="Notifications"
+              onClick={handleBellClick}
+              style={{ background: 'none', border: 'none', padding: '4px', cursor: 'pointer', position: 'relative' }}
+            >
+              <i
+                key={showBellBadge ? bellAnimTick : 'idle'}
+                className="ti ti-bell"
+                style={{
+                  fontSize: '22px',
+                  color: BRAND,
+                  display: 'inline-block',
+                  transformOrigin: 'top center',
+                  animation: showBellBadge ? 'helmr-bell-jiggle 0.5s ease-in-out' : undefined,
+                }}
+              />
+              {showBellBadge && (
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    top: '3px',
+                    right: '3px',
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: '#E8645A',
+                    border: '1.5px solid white',
+                  }}
+                />
+              )}
             </button>
           </div>
 
@@ -2043,6 +2096,16 @@ export default function Helmr() {
 
   return (
     <div style={DS.page}>
+      <style>{`
+        @keyframes helmr-bell-jiggle {
+          0% { transform: rotate(0deg) scale(1); }
+          20% { transform: rotate(-15deg) scale(1.1); }
+          40% { transform: rotate(15deg) scale(1.2); }
+          60% { transform: rotate(-10deg) scale(1.15); }
+          80% { transform: rotate(10deg) scale(1.08); }
+          100% { transform: rotate(0deg) scale(1); }
+        }
+      `}</style>
       <div style={DS.frame}>
         {screen === 'dashboard' ? (
           <div style={DS.screenBody}>{renderScreen()}</div>
@@ -2066,6 +2129,27 @@ export default function Helmr() {
           }}
           onNewEvent={startNewEvent}
         />
+      )}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '90px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: '#1a1a1a',
+          color: 'white',
+          padding: '10px 18px',
+          borderRadius: '999px',
+          fontSize: '13px',
+          fontWeight: 500,
+          zIndex: 160,
+          fontFamily: FONT,
+          maxWidth: 'calc(100% - 32px)',
+          textAlign: 'center',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        }}>
+          {toast}
+        </div>
       )}
       <button style={DS.feedbackBtn} onClick={() => setFeedbackOpen(true)}>💬 Feedback</button>
       <AppDialog dialog={dialog} onClose={() => setDialog(null)} />
