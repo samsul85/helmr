@@ -24,7 +24,10 @@ export default function AuthScreen({ onSession }) {
     try {
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email: trimmed,
-        options: { shouldCreateUser: true },
+        options: {
+          shouldCreateUser: true,
+          data: {},
+        },
       });
       if (otpError) throw otpError;
       setStep('otp');
