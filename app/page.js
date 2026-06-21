@@ -10,7 +10,6 @@
 // after the Tricia call confirms (or reframes) the niche.
 
 import { useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 
 const WAITLIST_URL = 'https://forms.gle/N1Hj3eh2VGiTApVi7';
 
@@ -268,43 +267,10 @@ const S = {
 
 export default function LandingPage() {
   useEffect(() => {
-    let cancelled = false;
-
-    const redirectToApp = (preserveAuthParams = false) => {
-      if (preserveAuthParams) {
-        window.location.href = `/app${window.location.search}${window.location.hash}`;
-        return;
-      }
-      window.location.href = '/app';
-    };
-
-    const bounceAuthenticatedUsersToApp = async () => {
-      const { hasAuthToken } = getAuthParamsInUrl();
-
-      // Magic link landed on / instead of /app — forward auth params so /app can finish sign-in.
-      if (hasAuthToken) {
-        redirectToApp(true);
-        return;
-      }
-
-      const { data } = await supabase.auth.getSession();
-      if (cancelled) return;
-
-      if (data.session) {
-        redirectToApp(false);
-      }
-    };
-
-    bounceAuthenticatedUsersToApp();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) redirectToApp(false);
-    });
-
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-    };
+    const { hasAuthToken } = getAuthParamsInUrl();
+    if (hasAuthToken) {
+      window.location.href = `/app${window.location.search}${window.location.hash}`;
+    }
   }, []);
 
   useEffect(() => {
