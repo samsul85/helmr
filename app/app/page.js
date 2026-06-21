@@ -5,7 +5,7 @@ import UpgradeModal from '../../components/UpgradeModal';
 import AuthScreen from '../../components/AuthScreen';
 import AppDialog, { createDialogHelpers } from '../../components/AppDialog';
 import BottomNav from '../../components/BottomNav';
-import { getSupabaseClient } from '../../lib/supabase';
+import { supabase, getAuthHeaders } from '../../lib/supabase';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
 import { BRAND, CREAM, DS, getEventColor, STATUS_STYLES, FONT, TEAL_LIGHT, TEXT_DARK, CARD_BORDER } from '../../lib/design';
 import {
@@ -525,7 +525,6 @@ export default function Helmr() {
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    const supabase = getSupabaseClient();
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       setSession(initialSession);
       setAuthReady(true);
@@ -1123,7 +1122,11 @@ function HelmrApp({ session }) {
 
       const res = await fetch(`${window.location.origin}/api/events`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(await getAuthHeaders()),
+        },
+        credentials: 'include',
         body: JSON.stringify({
           ownerId: session.user.id,
           eventType, eventName, eventDate, eventLoc, dateTBD, locTBD,
@@ -2761,7 +2764,7 @@ function HelmrApp({ session }) {
         onClose={() => setProfileOpen(false)}
         userEmail={session.user.email}
         onSignOut={async () => {
-          await getSupabaseClient().auth.signOut();
+          await supabase.auth.signOut();
           setProfileOpen(false);
         }}
       />

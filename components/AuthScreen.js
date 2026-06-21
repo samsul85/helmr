@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { getSupabaseClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { BRAND, DS, FONT, TEAL_LIGHT, CARD_BORDER } from '@/lib/design';
 
 export default function AuthScreen({ onSession }) {
@@ -22,7 +22,6 @@ export default function AuthScreen({ onSession }) {
     setLoading(true);
     setError('');
     try {
-      const supabase = getSupabaseClient();
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email: trimmed,
         options: { shouldCreateUser: true },
@@ -48,7 +47,6 @@ export default function AuthScreen({ onSession }) {
     setLoading(true);
     setError('');
     try {
-      const supabase = getSupabaseClient();
       const { data, error: verifyError } = await supabase.auth.verifyOtp({
         email: email.trim(),
         token,

@@ -10,7 +10,7 @@
 // after the Tricia call confirms (or reframes) the niche.
 
 import { useEffect } from 'react';
-import { getSupabaseClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 const WAITLIST_URL = 'https://forms.gle/N1Hj3eh2VGiTApVi7';
 
@@ -269,7 +269,6 @@ const S = {
 export default function LandingPage() {
   useEffect(() => {
     let cancelled = false;
-    const supabase = getSupabaseClient();
 
     const redirectToApp = (preserveAuthParams = false) => {
       if (preserveAuthParams) {

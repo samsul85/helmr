@@ -9,7 +9,6 @@
     "setup-stripe": "node scripts/setup-stripe-products.mjs"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
     "@upstash/redis": "^1.34.3",
     "@vercel/analytics": "^1.3.1",

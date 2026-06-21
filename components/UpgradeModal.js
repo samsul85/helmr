@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getSupabaseClient } from '@/lib/supabase';
+import { supabase, getAuthHeaders } from '@/lib/supabase';
 import { BRAND, FONT, TEAL_LIGHT } from '@/lib/design';
 
 const AMBER = '#F5A623';
@@ -88,7 +88,6 @@ export default function UpgradeModal({ open, onClose, email }) {
       let checkoutEmail = typeof email === 'string' ? email.trim() : '';
 
       if (!checkoutEmail) {
-        const supabase = getSupabaseClient();
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError) {
           console.error('[UpgradeModal] getUser failed:', userError.message);
@@ -104,7 +103,10 @@ export default function UpgradeModal({ open, onClose, email }) {
 
       const res = await fetch(`${window.location.origin}/api/stripe/checkout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(await getAuthHeaders()),
+        },
         credentials: 'include',
         body: JSON.stringify({
           email: checkoutEmail,
