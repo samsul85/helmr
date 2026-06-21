@@ -792,6 +792,12 @@ export default function Helmr() {
     if (!d || isNaN(d.getTime())) return '';
     return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
+  const formatGuestTabDeadline = (d) => {
+    if (!d || isNaN(d.getTime())) return '';
+    const datePart = `${d.toLocaleString(undefined, { month: 'short' })} ${d.getDate()}`;
+    const timePart = d.toLocaleString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return `${datePart} · ${timePart}`;
+  };
 
   const resumeEvent = async (id, initialTab = 'home') => {
     setLoading(true);
@@ -1888,95 +1894,95 @@ export default function Helmr() {
           </>
         )}
 
-        {tab === 'people' && (
-          <div style={{ padding: '16px' }}>
-            {inviteMode === 'broadcast' && (
-              <p style={{ fontSize: '12px', color: '#777', margin: '0 0 12px', padding: '10px 14px', background: '#f5f3ee', borderRadius: '14px' }}>
-                Contributors will show up here as people pledge from the shared link.
-              </p>
-            )}
-        {people.map(p => {
-              const c = STATUS_STYLES[p.status];
-              const isOrganizer = p.role === 'organizer';
-              const contributed = Number(p.contributedAmount) || 0;
-              const isBroadcastGuest = p.source === 'broadcast';
-              const personShare = peopleShares.find(s => s.id === p.id);
-              const shareAmt = personShare ? Math.round(personShare.share) : 0;
-              const shouldShowShare = mode === 'cost_split' && (
-                isOrganizer ? organizerIncludedInSplit : (p.status === 'confirmed' || p.status === 'paid')
-              ) && shareAmt > 0;
-              return (
-                <div key={p.id} style={{ ...DS.card, marginBottom: '10px' }}>
+        {tab === 'people' && (() => {
+          const organizer = people.find(p => p.role === 'organizer');
+          const guests = people.filter(p => p.role !== 'organizer');
+          const guestCardStyle = {
+            background: 'white',
+            borderRadius: '14px',
+            padding: '14px',
+            marginBottom: '10px',
+            border: `0.5px solid ${CARD_BORDER}`,
+            position: 'relative',
+          };
+          const avatarStyle = (bg, fg) => ({
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            background: bg,
+            color: fg,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '14px',
+            fontWeight: 600,
+            flexShrink: 0,
+          });
+          const guestTotalAmount = guests.reduce((sum, p) => {
+            if (mode === 'open_pool') return sum + (Number(p.contributedAmount) || 0);
+            const personShare = peopleShares.find(s => s.id === p.id);
+            const shareAmt = personShare ? Math.round(personShare.share) : 0;
+            if (p.status === 'confirmed' || p.status === 'paid') return sum + shareAmt;
+            return sum;
+          }, 0);
+
+          return (
+          <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
+            <div style={{ padding: '16px', flex: 1, paddingBottom: inviteMode === 'personal' ? '8px' : '16px' }}>
+              {deadlineDate && !isNaN(deadlineDate.getTime()) && (
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: '999px',
+                  background: TEAL_LIGHT,
+                  color: TEXT_DARK,
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  marginBottom: '14px',
+                }}>
+                  <i className="ti ti-clock" style={{ fontSize: '16px', flexShrink: 0 }} />
+                  {deadlinePassed
+                    ? `Closed ${formatGuestTabDeadline(deadlineDate)}`
+                    : `Closes ${formatGuestTabDeadline(deadlineDate)}`}
+                </div>
+              )}
+
+              {inviteMode === 'broadcast' && (
+                <p style={{ fontSize: '12px', color: '#777', margin: '0 0 14px', padding: '10px 14px', background: '#f5f3ee', borderRadius: '14px' }}>
+                  Contributors will show up here as people pledge from the shared link.
+                </p>
+              )}
+
+              {organizer && (
+                <div style={{ ...guestCardStyle, marginBottom: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: '50%',
-                      background: colorWithAlpha(accentColor, 0.12),
-                      color: accentColor,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      flexShrink: 0,
-                    }}>
-                      {getInitials(p.name)}
+                    <div style={avatarStyle(BRAND, 'white')}>
+                      {getInitials(organizer.name)}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ fontSize: '15px', fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {p.name}
-                          {isOrganizer && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · organizer</span>}
-                          {p.viewedAt && !isOrganizer && <span style={{ fontSize: '11px', color: BRAND, fontWeight: 400 }}> · viewed</span>}
-                          {isBroadcastGuest && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · self-added</span>}
-                        </div>
-                        {isOrganizer && mode === 'open_pool' && contributed > 0 && (
-                          <span style={{ fontSize: '13px', fontWeight: 500, color: BRAND }}>${contributed}</span>
-                        )}
-                        {!isOrganizer && mode === 'open_pool' && contributed > 0 && (
-                          <span style={{ fontSize: '13px', fontWeight: 500, color: BRAND }}>${contributed}</span>
-                        )}
-                        {shouldShowShare && (
-                          <span style={{ fontSize: '13px', fontWeight: 500, color: BRAND }}>${shareAmt}</span>
-                        )}
-                        {!isOrganizer && mode === 'cost_split' && (
-                          <span style={{ ...DS.pill, background: c?.bg || '#eee', color: c?.fg || '#666' }} onClick={() => cycleStatus(p.id)}>{p.status}</span>
-                        )}
-                        {!isOrganizer && mode === 'open_pool' && (
-                          <span
-                            style={{ ...DS.pill, background: c?.bg || '#eeeae0', color: c?.fg || '#666' }}
-                            onClick={() => cycleStatus(p.id)}
-                          >
-                            {p.status === 'invited' && contributed === 0 ? 'waiting' : p.status}
-                          </span>
-                        )}
-                        {!isOrganizer && (
-                          <button
-                            style={{ ...DS.btnGhost, padding: '4px' }}
-                            onClick={async () => {
-                              const hasContributed = Number(p.contributedAmount) > 0;
-                              const hasResponded = p.status && p.status !== 'invited';
-                              let msg = `Remove ${p.name} from this event?`;
-                              if (hasContributed) {
-                                msg = `Remove ${p.name}? They've already contributed $${Number(p.contributedAmount)}. This will erase their record from the pool and can't be undone.`;
-                              } else if (hasResponded) {
-                                msg = `Remove ${p.name}? They've already responded (${p.status}). This can't be undone.`;
-                              }
-                              if (await dlg.confirm(msg)) {
-                                setPeople(people.filter(x => x.id !== p.id));
-                              }
-                            }}
-                            aria-label="Remove"
-                          >🗑️</button>
-                        )}
-                      </div>
+                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px' }}>{organizer.name}</div>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        padding: '4px 10px',
+                        borderRadius: '999px',
+                        background: '#eeeae0',
+                        color: '#666',
+                      }}>
+                        Organizer
+                      </span>
                     </div>
+                    {mode === 'open_pool' && (Number(organizer.contributedAmount) || 0) > 0 && (
+                      <span style={{ fontSize: '15px', fontWeight: 600, color: BRAND, flexShrink: 0 }}>
+                        ${Number(organizer.contributedAmount)}
+                      </span>
+                    )}
                   </div>
 
-                  {/* Organizer-specific controls */}
-                  {isOrganizer && mode === 'open_pool' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                  {mode === 'open_pool' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
                       <span style={{ fontSize: '13px', color: '#666', whiteSpace: 'nowrap' }}>My contribution:</span>
                       <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
                         <span style={{ fontSize: '14px', color: '#666', marginRight: '2px' }}>$</span>
@@ -1985,88 +1991,222 @@ export default function Helmr() {
                           min="0"
                           step="1"
                           inputMode="numeric"
-                          value={contributed || ''}
+                          value={Number(organizer.contributedAmount) || ''}
                           placeholder="0"
                           onChange={e => {
                             const v = Math.max(0, Number(e.target.value) || 0);
                             setPeople(people.map(x =>
-                              x.id === p.id ? { ...x, contributedAmount: v } : x
+                              x.id === organizer.id ? { ...x, contributedAmount: v } : x
                             ));
                           }}
-                          style={{ ...DS.input, padding: '6px 8px', fontSize: '14px', flex: 1 }}
+                          style={{ ...DS.input, padding: '8px 12px', fontSize: '14px', flex: 1 }}
                         />
                       </div>
                     </div>
                   )}
-                  {isOrganizer && mode === 'cost_split' && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: '13px', color: '#666', cursor: 'pointer' }}>
+
+                  {mode === 'cost_split' && (
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      marginTop: '12px',
+                      padding: '12px 14px',
+                      background: '#f9f8f5',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                    }}>
                       <input
                         type="checkbox"
-                        checked={!!p.includedInSplit}
+                        checked={!!organizer.includedInSplit}
                         onChange={e => {
                           const checked = e.target.checked;
                           setPeople(people.map(x =>
-                            x.id === p.id ? { ...x, includedInSplit: checked } : x
+                            x.id === organizer.id ? { ...x, includedInSplit: checked } : x
                           ));
                         }}
-                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: BRAND }}
                       />
-                      Include myself in the split
+                      <span style={{ fontSize: '14px', color: '#444' }}>Include myself in the split</span>
                     </label>
                   )}
+                </div>
+              )}
 
-                  {!isOrganizer && customFieldLabel && p.customFieldValue && (
-                    <div style={{ fontSize: '12px', color: '#777', marginTop: '4px' }}>
-                      {customFieldLabel}: <span style={{ color: '#333' }}>{p.customFieldValue}</span>
-                    </div>
-                  )}
-                  {!isOrganizer && tipsEnabled && Number(p.tipAmount) > 0 && (() => {
-                    // Show the organizer what this guest will actually e-transfer:
-                    // their share/contribution + the tip they chose to add on top.
-                    const tipAmt = Number(p.tipAmount) || 0;
-                    const baseAmt = mode === 'open_pool' ? contributed : shareAmt;
-                    const baseLabel = mode === 'open_pool' ? 'Contribution' : 'Share';
+              {guests.length === 0 && inviteMode === 'personal' ? (
+                <div style={{ textAlign: 'center', padding: '40px 16px 24px' }}>
+                  <i className="ti ti-users" style={{ fontSize: '48px', color: '#ccc', display: 'block', marginBottom: '16px' }} />
+                  <div style={{ fontSize: '16px', color: '#888', fontWeight: 500, marginBottom: '6px' }}>No guests yet</div>
+                  <div style={{ fontSize: '13px', color: '#aaa' }}>Add people to get started</div>
+                </div>
+              ) : guests.length > 0 && (
+                <>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '10px',
+                    marginTop: '4px',
+                  }}>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      letterSpacing: '0.06em',
+                      textTransform: 'uppercase',
+                      color: '#888',
+                    }}>
+                      Guests ({guests.length})
+                    </span>
+                    {guestTotalAmount > 0 && (
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: BRAND }}>
+                        ${guestTotalAmount.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+
+                  {guests.map(p => {
+                    const c = STATUS_STYLES[p.status];
+                    const contributed = Number(p.contributedAmount) || 0;
+                    const isBroadcastGuest = p.source === 'broadcast';
+                    const personShare = peopleShares.find(s => s.id === p.id);
+                    const shareAmt = personShare ? Math.round(personShare.share) : 0;
+                    const showShareAmt = mode === 'cost_split' && (p.status === 'confirmed' || p.status === 'paid') && shareAmt > 0;
+                    const showPoolAmt = mode === 'open_pool' && contributed > 0;
+                    const statusLabel = mode === 'open_pool' && p.status === 'invited' && contributed === 0
+                      ? 'waiting'
+                      : p.status;
+
                     return (
-                      <div style={{ marginTop: '6px', padding: '6px 8px', background: '#f5f3ee', borderRadius: '6px', fontSize: '12px', color: '#666' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>{baseLabel}</span><span>${baseAmt}</span>
+                      <div key={p.id} style={guestCardStyle}>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${p.name}`}
+                          style={{
+                            position: 'absolute',
+                            top: '10px',
+                            right: '10px',
+                            background: 'none',
+                            border: 'none',
+                            padding: '4px',
+                            cursor: 'pointer',
+                            color: '#ccc',
+                          }}
+                          onClick={async () => {
+                            const hasContributed = contributed > 0;
+                            const hasResponded = p.status && p.status !== 'invited';
+                            let msg = `Remove ${p.name} from this event?`;
+                            if (hasContributed) {
+                              msg = `Remove ${p.name}? They've already contributed $${contributed}. This will erase their record from the pool and can't be undone.`;
+                            } else if (hasResponded) {
+                              msg = `Remove ${p.name}? They've already responded (${p.status}). This can't be undone.`;
+                            }
+                            if (await dlg.confirm(msg)) {
+                              setPeople(people.filter(x => x.id !== p.id));
+                            }
+                          }}
+                        >
+                          <i className="ti ti-trash" style={{ fontSize: '16px' }} />
+                        </button>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingRight: '24px' }}>
+                          <div style={avatarStyle(colorWithAlpha(accentColor, 0.12), accentColor)}>
+                            {getInitials(p.name)}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '15px', fontWeight: 500, marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {p.name}
+                              {p.viewedAt && <span style={{ fontSize: '11px', color: BRAND, fontWeight: 400 }}> · viewed</span>}
+                              {isBroadcastGuest && <span style={{ fontSize: '11px', color: '#999', fontWeight: 400 }}> · self-added</span>}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => cycleStatus(p.id)}
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 500,
+                                padding: '4px 10px',
+                                borderRadius: '999px',
+                                border: 'none',
+                                background: c?.bg || '#eeeae0',
+                                color: c?.fg || '#666',
+                                cursor: 'pointer',
+                                fontFamily: FONT,
+                              }}
+                            >
+                              {statusLabel}
+                            </button>
+                          </div>
+                          {(showShareAmt || showPoolAmt) && (
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <div style={{ fontSize: '15px', fontWeight: 600, color: BRAND }}>
+                                ${showPoolAmt ? contributed : shareAmt}
+                              </div>
+                              {mode === 'cost_split' && (
+                                <div style={{ fontSize: '11px', color: '#999' }}>
+                                  {p.status === 'paid' ? 'received' : 'owed'}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                          <span>Tip 🎩</span><span>${tipAmt}</span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: '0.5px solid #e5e0d4', fontWeight: 500, color: '#333' }}>
-                          <span>Expected e-Transfer</span><span>${baseAmt + tipAmt}</span>
-                        </div>
+
+                        {customFieldLabel && p.customFieldValue && (
+                          <div style={{ fontSize: '12px', color: '#777', marginTop: '10px' }}>
+                            {customFieldLabel}: <span style={{ color: '#333' }}>{p.customFieldValue}</span>
+                          </div>
+                        )}
+                        {tipsEnabled && Number(p.tipAmount) > 0 && (() => {
+                          const tipAmt = Number(p.tipAmount) || 0;
+                          const baseAmt = mode === 'open_pool' ? contributed : shareAmt;
+                          const baseLabel = mode === 'open_pool' ? 'Contribution' : 'Share';
+                          return (
+                            <div style={{ marginTop: '10px', padding: '8px 10px', background: '#f5f3ee', borderRadius: '8px', fontSize: '12px', color: '#666' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>{baseLabel}</span><span>${baseAmt}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                                <span>Tip</span><span>${tipAmt}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: `0.5px solid ${CARD_BORDER}`, fontWeight: 500, color: '#333' }}>
+                                <span>Expected e-Transfer</span><span>${baseAmt + tipAmt}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        {p.paymentScreenshotKey && (
+                          <a
+                            href={`/api/events/${eventId}/screenshot?guestId=${p.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ display: 'inline-block', marginTop: '8px', fontSize: '12px', color: BRAND, textDecoration: 'none', fontWeight: 500 }}
+                          >
+                            View e-Transfer screenshot
+                          </a>
+                        )}
                       </div>
                     );
-                  })()}
-                  {!isOrganizer && p.paymentScreenshotKey && (
-                    <a
-                      href={`/api/events/${eventId}/screenshot?guestId=${p.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ display: 'inline-block', marginTop: '6px', fontSize: '12px', color: BRAND, textDecoration: 'none', fontWeight: 500 }}
-                    >
-                      📎 View e-Transfer screenshot
-                    </a>
-                  )}
-                </div>
-              );
-            })}
-            {people.length === 1 && inviteMode === 'personal' && (
-              <p style={{ fontSize: '12px', color: '#999', textAlign: 'center', padding: '12px 0' }}>Add the people you're inviting to your event.</p>
-            )}
+                  })}
+                </>
+              )}
+            </div>
+
             {inviteMode === 'personal' && (
-              <>
-                <button style={{ ...DS.btn, marginTop: '4px' }} onClick={async () => {
-                  const n = await dlg.prompt('Name?');
-                  if (n) setPeople([...people, { id: newGuestId(), name: n, status: 'invited' }]);
-                }}>+ Add person</button>
-                <p style={{ fontSize: '11px', color: '#999', marginTop: '8px' }}>Guests can RSVP themselves from their link. Tap a status to manually override.</p>
-              </>
+              <div style={DS.stickyBottom}>
+                <button
+                  type="button"
+                  style={{ ...DS.btn, ...DS.btnPrimary }}
+                  onClick={async () => {
+                    const n = await dlg.prompt('Name?');
+                    if (n) setPeople([...people, { id: newGuestId(), name: n, status: 'invited' }]);
+                  }}
+                >
+                  + Add person
+                </button>
+              </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {tab === 'expenses' && (
           <div style={{ padding: '16px' }}>
