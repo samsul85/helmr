@@ -158,6 +158,12 @@ function getInitials(name) {
   return (parts[0]?.[0] || '?').toUpperCase();
 }
 
+function capitalizeDisplayName(name) {
+  const s = (name || '').trim();
+  if (!s) return 'You';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function formatTimeAgo(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -1593,7 +1599,7 @@ export default function Helmr() {
         </div>
 
         <div style={{ padding: '0 0 80px' }}>
-          {deadlineDate && !isNaN(deadlineDate.getTime()) && (
+          {tab !== 'people' && deadlineDate && !isNaN(deadlineDate.getTime()) && (
             <div style={{
               padding: '8px 12px',
               borderRadius: '12px',
@@ -1962,7 +1968,7 @@ export default function Helmr() {
                       {getInitials(organizer.name)}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px' }}>{organizer.name}</div>
+                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '6px' }}>{capitalizeDisplayName(organizer.name)}</div>
                       <span style={{
                         fontSize: '11px',
                         fontWeight: 500,
