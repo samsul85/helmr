@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import UpgradeModal from '../../components/UpgradeModal';
+import AuthScreen from '../../components/AuthScreen';
 import AppDialog, { createDialogHelpers } from '../../components/AppDialog';
 import BottomNav from '../../components/BottomNav';
+import { getSupabaseClient } from '../../lib/supabase';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
 import { BRAND, CREAM, DS, getEventColor, STATUS_STYLES, FONT, TEAL_LIGHT, TEXT_DARK, CARD_BORDER } from '../../lib/design';
 import {
@@ -19,7 +21,6 @@ import {
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/mredzlyn';
 const LS_KEY = 'helmr.events.v1';
 const ORGANIZER_NAME_KEY = 'helmr.organizerName';
-const OWNER_ID = 'local-user';
 
 const eventTypes = [
   // School / community / fundraising types first — these are what PAC organizers
@@ -198,13 +199,19 @@ function isoToDatetimeLocal(s) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function ProfileModal({ open, onClose }) {
+function ProfileModal({ open, onClose, userEmail, onSignOut }) {
   if (!open) return null;
 
   return (
     <div style={DS.modalOverlay} onClick={onClose}>
       <div style={DS.modal} onClick={e => e.stopPropagation()}>
         <h3 style={{ margin: '0 0 16px', fontSize: '20px', fontWeight: 500 }}>Profile</h3>
+        {userEmail && (
+          <div style={{ ...DS.card, marginBottom: '12px' }}>
+            <div style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>Signed in as</div>
+            <div style={{ fontSize: '14px', fontWeight: 500, color: '#1a1a1a', wordBreak: 'break-all' }}>{userEmail}</div>
+          </div>
+        )}
         <div style={{ ...DS.card, marginBottom: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '14px', color: '#666' }}>Plan</span>
@@ -214,6 +221,7 @@ function ProfileModal({ open, onClose }) {
         <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#888', textAlign: 'center' }}>
           Version {APP_VERSION}
         </p>
+        <button style={{ ...DS.btn, marginBottom: '10px' }} onClick={onSignOut}>Sign out</button>
         <button style={{ ...DS.btn, ...DS.btnPrimary }} onClick={onClose}>Close</button>
       </div>
     </div>
@@ -513,6 +521,42 @@ function ShareModal({ open, onClose, event }) {
 }
 
 export default function Helmr() {
+  const [session, setSession] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthReady(true);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (!authReady) {
+    return (
+      <div style={{ ...DS.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <style>{`@keyframes helmr-auth-spin { to { transform: rotate(360deg); } }`}</style>
+        <i
+          className="ti ti-loader-2"
+          style={{ fontSize: '28px', color: BRAND, animation: 'helmr-auth-spin 1s linear infinite' }}
+        />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <AuthScreen onSession={setSession} />;
+  }
+
+  return <HelmrApp session={session} />;
+}
+
+function HelmrApp({ session }) {
   const [screen, setScreen] = useState('welcome');
   const [navDirection, setNavDirection] = useState('forward');
   const [successOverlay, setSuccessOverlay] = useState(false);
@@ -1081,7 +1125,7 @@ export default function Helmr() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ownerId: OWNER_ID,
+          ownerId: session.user.id,
           eventType, eventName, eventDate, eventLoc, dateTBD, locTBD,
           organizerName, organizerEmail,
           mode, inviteMode, goal: Number(goal) || 0,
@@ -2712,7 +2756,15 @@ export default function Helmr() {
       )}
       <button style={DS.feedbackBtn} onClick={() => setFeedbackOpen(true)}>💬 Feedback</button>
       <AppDialog dialog={dialog} onClose={() => setDialog(null)} />
-      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <ProfileModal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        userEmail={session.user.email}
+        onSignOut={async () => {
+          await getSupabaseClient().auth.signOut();
+          setProfileOpen(false);
+        }}
+      />
       <FeedbackModal
         open={feedbackOpen}
         onClose={() => setFeedbackOpen(false)}
