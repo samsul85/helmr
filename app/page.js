@@ -10,19 +10,9 @@
 // after the Tricia call confirms (or reframes) the niche.
 
 import { useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 const WAITLIST_URL = 'https://forms.gle/N1Hj3eh2VGiTApVi7';
-
-function getAuthParamsInUrl() {
-  if (typeof window === 'undefined') return { hasAuthToken: false };
-  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  const queryParams = new URLSearchParams(window.location.search);
-  const hasAuthToken =
-    hashParams.has('access_token') ||
-    hashParams.has('refresh_token') ||
-    queryParams.has('code');
-  return { hasAuthToken };
-}
 
 const S = {
   page: {
@@ -267,10 +257,21 @@ const S = {
 
 export default function LandingPage() {
   useEffect(() => {
-    const { hasAuthToken } = getAuthParamsInUrl();
-    if (hasAuthToken) {
-      window.location.href = `/app${window.location.search}${window.location.hash}`;
+    // Check for auth tokens in URL (magic link redirect)
+    const hashParams = new URLSearchParams(window.location.hash.slice(1));
+    const queryParams = new URLSearchParams(window.location.search);
+
+    if (hashParams.get('access_token') || queryParams.get('code')) {
+      window.location.href = '/app' + window.location.hash + window.location.search;
+      return;
     }
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data }) => {
+      if (data?.session) {
+        window.location.href = '/app';
+      }
+    });
   }, []);
 
   useEffect(() => {
