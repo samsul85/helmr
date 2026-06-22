@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 function summarizeEvent(event) {
   const expenses = Array.isArray(event.expenses) ? event.expenses : [];
   const people = Array.isArray(event.people) ? event.people : [];
+  const guests = people.filter(p => p.role !== 'organizer');
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
   const pooled = people.reduce((s, p) => s + (Number(p.contributedAmount) || 0), 0);
   return {
@@ -19,6 +20,11 @@ function summarizeEvent(event) {
     responseDeadline: event.responseDeadline || '',
     total,
     pooled,
+    goal: Number(event.goal) || 0,
+    paidCount: guests.filter(p => p.status === 'paid').length,
+    guestCount: guests.length,
+    archived: !!event.archived,
+    ownerId: event.ownerId || '',
     updatedAt: event.updatedAt || event.createdAt || 0,
     createdAt: event.createdAt || 0,
   };

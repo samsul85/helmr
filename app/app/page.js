@@ -74,6 +74,33 @@ function saveOrganizerNameToLocal(name) {
   } catch {}
 }
 
+function eventsForOwnerFromLocal(ownerId) {
+  return loadSavedEvents()
+    .filter(e => e.ownerId === ownerId)
+    .map(normalizeSavedEvent)
+    .filter(Boolean);
+}
+
+function mergeServerAndLocalEvents(serverEvents, ownerId) {
+  const localById = new Map(
+    loadSavedEvents()
+      .filter(e => e.ownerId === ownerId)
+      .map(e => [e.id, e]),
+  );
+
+  if (!serverEvents?.length) {
+    return eventsForOwnerFromLocal(ownerId);
+  }
+
+  return serverEvents
+    .map(se => normalizeSavedEvent({
+      ...se,
+      ...(localById.get(se.id) || {}),
+      ownerId,
+    }))
+    .filter(Boolean);
+}
+
 function saveEventToLocal(entry) {
   if (typeof window === 'undefined') return;
   try {
@@ -107,6 +134,7 @@ function normalizeSavedEvent(event) {
     paidCount: Number(event.paidCount) || 0,
     guestCount: Number(event.guestCount) || 0,
     archived: !!event.archived,
+    ownerId: event.ownerId || '',
     updatedAt: Number(event.updatedAt || event.createdAt) || Date.now(),
   };
 }
@@ -628,10 +656,29 @@ function HelmrApp({ session }) {
     setScreen(target);
   };
 
-  const refreshSavedEvents = () => {
-    const events = loadSavedEvents().map(normalizeSavedEvent).filter(Boolean);
-    setSavedEvents(events);
-    return events;
+  const refreshSavedEvents = async () => {
+    const ownerId = session.user.id;
+    try {
+      const res = await fetch(`${window.location.origin}/api/user/events`, {
+        headers: await getAuthHeaders(),
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const merged = mergeServerAndLocalEvents(data.events || [], ownerId);
+        setSavedEvents(merged);
+        return merged;
+      }
+    } catch {
+      // fall through to localStorage
+    }
+    const local = eventsForOwnerFromLocal(ownerId);
+    setSavedEvents(local);
+    return local;
+  };
+
+  const persistEventLocal = (entry) => {
+    saveEventToLocal({ ...entry, ownerId: session.user.id });
   };
 
   useEffect(() => {
@@ -693,8 +740,8 @@ function HelmrApp({ session }) {
           body: JSON.stringify({ archived: true }),
         });
         if (!res.ok) throw new Error('Failed');
-        saveEventToLocal({ ...ev, archived: true, updatedAt: Date.now() });
-        setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
+        saveEventToLocal({ ...ev, archived: true, ownerId: session.user.id, updatedAt: Date.now() });
+        await refreshSavedEvents();
       } catch {
         await dlg.alert("Couldn't archive event. Please try again.");
       }
@@ -712,7 +759,7 @@ function HelmrApp({ session }) {
         const res = await fetch(`/api/events/${ev.id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error('Failed');
         removeEventFromLocal(ev.id);
-        setSavedEvents(prev => prev.filter(x => x.id !== ev.id));
+        await refreshSavedEvents();
       } catch {
         await dlg.alert("Couldn't delete event. Please try again.");
       }
@@ -733,8 +780,8 @@ function HelmrApp({ session }) {
         body: JSON.stringify({ archived: false }),
       });
       if (!res.ok) throw new Error('Failed');
-      saveEventToLocal({ ...ev, archived: false, updatedAt: Date.now() });
-      setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
+      saveEventToLocal({ ...ev, archived: false, ownerId: session.user.id, updatedAt: Date.now() });
+      await refreshSavedEvents();
     } catch {
       await dlg.alert("Couldn't restore event. Please try again.");
     }
@@ -824,10 +871,10 @@ function HelmrApp({ session }) {
     if (dy > 0) setPullDistance(Math.min(dy, 100));
   };
 
-  const onWelcomeTouchEnd = () => {
+  const onWelcomeTouchEnd = async () => {
     if (pullDistance > 60 && !refreshing) {
       setRefreshing(true);
-      refreshSavedEvents();
+      await refreshSavedEvents();
       setTimeout(() => setRefreshing(false), 600);
     }
     setPullDistance(0);
@@ -889,7 +936,7 @@ function HelmrApp({ session }) {
       setTipsEnabled(!!data.tipsEnabled);
       const guests = (data.people || []).filter(p => p.role !== 'organizer');
       const expenses = data.expenses || [];
-      saveEventToLocal({
+      persistEventLocal({
         id: data.id,
         name: data.eventName || 'Untitled event',
         eventType: data.eventType || 'other',
@@ -944,7 +991,7 @@ function HelmrApp({ session }) {
         if (eventId) {
           const guests = people.filter(p => p.role !== 'organizer');
           const prev = loadSavedEvents().find(e => e.id === eventId);
-          saveEventToLocal({
+          persistEventLocal({
             id: eventId,
             name: eventName || 'Untitled event',
             eventType,
@@ -1046,19 +1093,29 @@ function HelmrApp({ session }) {
 
   // Reset all event state so "Plan something new" starts from a clean slate.
   // Without this, fields from the previously-open event leak into the new one.
-  const countUserEvents = () => loadSavedEvents()
-    .map(normalizeSavedEvent)
-    .filter(Boolean)
-    .length;
+  const countUserEvents = async () => {
+    try {
+      const res = await fetch(`${window.location.origin}/api/user/events`, {
+        headers: await getAuthHeaders(),
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return (data.events || []).length;
+      }
+    } catch {
+      // fall through
+    }
+    return eventsForOwnerFromLocal(session.user.id).length;
+  };
 
-  const checkEventLimit = () => {
-    // Free tier: 1 event total — active and archived both count toward the limit.
-    const count = countUserEvents();
+  const checkEventLimit = async () => {
+    const count = await countUserEvents();
     return { blocked: count >= 1 };
   };
 
   const startNewEvent = async () => {
-    const { blocked } = checkEventLimit();
+    const { blocked } = await checkEventLimit();
     if (blocked) {
       setUpgradeOpen(true);
       return;
@@ -1114,7 +1171,13 @@ function HelmrApp({ session }) {
     }
     try {
       setSaving(true);
-      const { blocked } = checkEventLimit();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        await dlg.alert('Please sign in again.');
+        return;
+      }
+
+      const { blocked } = await checkEventLimit();
       if (blocked) {
         setUpgradeOpen(true);
         return;
@@ -1128,7 +1191,7 @@ function HelmrApp({ session }) {
         },
         credentials: 'include',
         body: JSON.stringify({
-          ownerId: session.user.id,
+          ownerId: user.id,
           eventType, eventName, eventDate, eventLoc, dateTBD, locTBD,
           organizerName, organizerEmail,
           mode, inviteMode, goal: Number(goal) || 0,
@@ -1149,7 +1212,7 @@ function HelmrApp({ session }) {
       }
       const data = await res.json();
       setEventId(data.id);
-      saveEventToLocal({
+      persistEventLocal({
         id: data.id,
         name: eventName || 'Untitled event',
         eventType,
@@ -1162,7 +1225,7 @@ function HelmrApp({ session }) {
         guestCount: 0,
         updatedAt: Date.now(),
       });
-      setSavedEvents(loadSavedEvents().map(normalizeSavedEvent).filter(Boolean));
+      await refreshSavedEvents();
       setSuccessOverlay(true);
       setTimeout(() => {
         setSuccessOverlay(false);
@@ -1177,9 +1240,7 @@ function HelmrApp({ session }) {
 
   const renderScreen = () => {
     if (screen === 'welcome') {
-      const allWelcomeEvents = typeof window !== 'undefined'
-        ? loadSavedEvents().map(normalizeSavedEvent).filter(Boolean)
-        : savedEvents;
+      const allWelcomeEvents = savedEvents;
       const activeWelcomeEvents = allWelcomeEvents.filter(ev => !ev.archived);
       const archivedWelcomeEvents = allWelcomeEvents.filter(ev => ev.archived);
       const hasArchivedEvents = archivedWelcomeEvents.length > 0;
