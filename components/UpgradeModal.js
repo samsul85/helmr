@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase, getAuthHeaders } from '@/lib/supabase';
+import { trackEvent } from '@/lib/analytics';
 import { BRAND, FONT, TEAL_LIGHT } from '@/lib/design';
 
 const AMBER = '#F5A623';
@@ -74,8 +75,14 @@ export default function UpgradeModal({ open, onClose, email }) {
     if (open) {
       setError('');
       setLoading(false);
+      trackEvent('upgrade_modal_shown');
     }
   }, [open]);
+
+  const handleMaybeLater = () => {
+    trackEvent('upgrade_modal_dismissed');
+    onClose();
+  };
 
   const startCheckout = async (event) => {
     event.preventDefault();
@@ -262,7 +269,7 @@ export default function UpgradeModal({ open, onClose, email }) {
         >
           {upgradeLabel}
         </button>
-        <button type="button" style={S.btnGhost} onClick={onClose} disabled={loading}>
+        <button type="button" style={S.btnGhost} onClick={handleMaybeLater} disabled={loading}>
           Maybe later
         </button>
       </div>

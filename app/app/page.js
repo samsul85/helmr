@@ -6,6 +6,7 @@ import AuthScreen from '../../components/AuthScreen';
 import AppDialog, { createDialogHelpers } from '../../components/AppDialog';
 import BottomNav from '../../components/BottomNav';
 import { supabase, getAuthHeaders } from '../../lib/supabase';
+import { trackEvent } from '../../lib/analytics';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
 import { BRAND, CREAM, DS, getEventColor, STATUS_STYLES, FONT, TEAL_LIGHT, TEXT_DARK, CARD_BORDER } from '../../lib/design';
 import {
@@ -1075,6 +1076,7 @@ function HelmrApp({ session }) {
   }, [eventId, screen, saving]);
 
   const pickType = (id) => {
+    trackEvent('event_type_selected', { eventType: id });
     setEventType(id);
     const t = eventTypes.find(e => e.id === id);
     setExpenses((t.expenses || []).map((name, i) => ({ id: i + 1, name, amount: 0 })));
@@ -1154,6 +1156,11 @@ function HelmrApp({ session }) {
     }));
   };
 
+  const openShareModal = () => {
+    trackEvent('share_link_opened');
+    setShareOpen(true);
+  };
+
   const goToDashboard = async () => {
     // Cost Split requires a deadline: it gates when guests see their final share
     // and the e-transfer details. Without it, the whole "RSVP first, pay after"
@@ -1212,6 +1219,7 @@ function HelmrApp({ session }) {
       }
       const data = await res.json();
       setEventId(data.id);
+      trackEvent('event_created', { eventType, mode });
       persistEventLocal({
         id: data.id,
         name: eventName || 'Untitled event',
@@ -1923,7 +1931,7 @@ function HelmrApp({ session }) {
                 margin: '0 16px 16px',
                 width: 'calc(100% - 32px)',
               }}
-              onClick={() => setShareOpen(true)}
+              onClick={openShareModal}
             >
               <i className="ti ti-share" style={{ marginRight: '6px' }} />
               {inviteMode === 'broadcast' ? 'Share the link' : 'Share invite links'}
@@ -2729,7 +2737,7 @@ function HelmrApp({ session }) {
                 opacity: missingDeadline ? 0.6 : 1,
               }}
               disabled={missingDeadline}
-              onClick={() => !missingDeadline && setShareOpen(true)}
+              onClick={() => !missingDeadline && openShareModal()}
             >
               {inviteMode === 'broadcast' ? 'Share the link' : 'Share invite links'}
             </button>

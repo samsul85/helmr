@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { trackEvent } from '@/lib/analytics';
 import { BRAND, DS, FONT, TEAL_LIGHT, CARD_BORDER } from '@/lib/design';
 
 export default function AuthScreen({ onSession }) {
@@ -56,7 +57,10 @@ export default function AuthScreen({ onSession }) {
         type: 'email',
       });
       if (verifyError) throw verifyError;
-      if (data.session) onSession?.(data.session);
+      if (data.session) {
+        trackEvent('auth_completed');
+        onSession?.(data.session);
+      }
     } catch (err) {
       setError(err.message || 'Invalid code. Please try again.');
     } finally {
