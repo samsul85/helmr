@@ -1,17 +1,25 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { getStripe } from '@/lib/stripe';
-import { setUserProStatus } from '@/lib/supabase-admin';
 
 export const runtime = 'nodejs';
 
-function getUserIdFromSession(session) {
-  return session?.metadata?.supabase_user_id || session?.client_reference_id || null;
+const supabaseUrl = 'https://vckmiesiybrtgfphprqh.supabase.co';
+
+function getSupabaseAdmin() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
+  }
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 }
 
 export async function POST(request) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.error('Missing STRIPE_WEBHOOK_SECRET');
+    console.error('[stripe/webhook] Missing STRIPE_WEBHOOK_SECRET');
     return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
   }
 
@@ -26,26 +34,49 @@ export async function POST(request) {
     const rawBody = await request.text();
     event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
   } catch (err) {
-    console.error('Stripe webhook signature verification failed:', err.message);
+    console.error('[stripe/webhook] Signature verification failed:', err.message);
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
+  if (event.type !== 'checkout.session.completed') {
+    return NextResponse.json({ received: true }, { status: 200 });
+  }
+
+  const session = event.data.object;
+  const supabaseUserId = session.metadata?.supabase_user_id;
+  const planInterval = session.metadata?.plan_interval;
+
+  if (!supabaseUserId) {
+    console.error('[stripe/webhook] checkout.session.completed missing supabase_user_id');
+    return NextResponse.json({ received: true }, { status: 200 });
+  }
+
   try {
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-      const userId = getUserIdFromSession(session);
+    const supabaseAdmin = getSupabaseAdmin();
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(supabaseUserId, {
+      user_metadata: {
+        plan: 'pro',
+        plan_interval: planInterval,
+      },
+    });
 
-      if (!userId) {
-        console.error('checkout.session.completed missing supabase user id');
-        return NextResponse.json({ received: true });
-      }
-
-      await setUserProStatus(userId, true);
+    if (error) {
+      console.error('[stripe/webhook] updateUserById failed:', {
+        userId: supabaseUserId,
+        message: error.message,
+        status: error.status,
+      });
+      return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
     }
+
+    console.error('[stripe/webhook] user upgraded to pro', {
+      userId: supabaseUserId,
+      planInterval,
+    });
   } catch (err) {
-    console.error('Stripe webhook handler error:', err);
+    console.error('[stripe/webhook] handler error:', err);
     return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
   }
 
-  return NextResponse.json({ received: true });
+  return NextResponse.json({ received: true }, { status: 200 });
 }
