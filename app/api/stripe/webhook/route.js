@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 
 const supabaseAdmin = createClient(
   'https://vckmiesiybrtgfphprqh.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 'PASTE_SERVICE_ROLE_KEY_HERE',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZja21pZXNpeWJydGdmcGhwcnFoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDgwMTM1OCwiZXhwIjoyMDk2Mzc3MzU4fQ.TaoIuSoTaH9B5gE1paaoIgn-fLE5FoKwDZjZuK8Iqhw',
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
