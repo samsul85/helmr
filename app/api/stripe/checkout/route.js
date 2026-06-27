@@ -23,19 +23,7 @@ function getOrigin(request) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const interval = body?.interval === 'yearly' ? 'yearly' : 'monthly';
-    const email = typeof body?.email === 'string' ? body.email.trim() : '';
-
-    console.error('[stripe/checkout] request received', {
-      interval,
-      hasEmail: Boolean(email),
-      env: getStripeConfigStatus(),
-    });
-
-    if (!email) {
-      console.error('[stripe/checkout] missing email in request body');
-      return NextResponse.json({ error: 'Missing email' }, { status: 400 });
-    }
+    const plan = body?.plan === 'yearly' || body?.interval === 'yearly' ? 'yearly' : 'monthly';
 
     const { user, cookiesToSet } = await getSupabaseUserFromRequest(request);
     if (!user) {
@@ -44,13 +32,27 @@ export async function POST(request) {
       return applySupabaseCookies(response, cookiesToSet);
     }
 
+    const email = user.email?.trim()
+      || (typeof body?.email === 'string' ? body.email.trim() : '');
+
+    console.error('[stripe/checkout] request received', {
+      plan,
+      hasEmail: Boolean(email),
+      env: getStripeConfigStatus(),
+    });
+
+    if (!email) {
+      console.error('[stripe/checkout] missing email for authenticated user');
+      return NextResponse.json({ error: 'Missing email' }, { status: 400 });
+    }
+
     const stripe = getStripe();
     const origin = getOrigin(request);
-    const priceId = getStripePriceId(interval);
+    const priceId = getStripePriceId(plan);
 
     console.error('[stripe/checkout] creating session', {
       userId: user.id,
-      interval,
+      plan,
       priceId,
       origin,
     });
@@ -64,12 +66,12 @@ export async function POST(request) {
       client_reference_id: user.id,
       metadata: {
         supabase_user_id: user.id,
-        plan_interval: interval,
+        plan_interval: plan,
       },
       subscription_data: {
         metadata: {
           supabase_user_id: user.id,
-          plan_interval: interval,
+          plan_interval: plan,
         },
       },
     });

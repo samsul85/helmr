@@ -117,7 +117,7 @@ export default function UpgradeModal({ open, onClose, email }) {
         credentials: 'include',
         body: JSON.stringify({
           email: checkoutEmail,
-          interval: planInterval,
+          plan: planInterval,
         }),
       });
 

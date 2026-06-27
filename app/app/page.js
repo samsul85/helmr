@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import UpgradeModal from '../../components/UpgradeModal';
 import AuthScreen from '../../components/AuthScreen';
 import AppDialog, { createDialogHelpers } from '../../components/AppDialog';
 import BottomNav from '../../components/BottomNav';
 import { supabase, getAuthHeaders } from '../../lib/supabase';
 import { trackEvent } from '../../lib/analytics';
+import { isProUser } from '../../lib/pro';
 import { participantsForExpense, computePersonShare } from '../../lib/shares';
 import { BRAND, CREAM, DS, getEventColor, STATUS_STYLES, FONT, TEAL_LIGHT, TEXT_DARK, CARD_BORDER } from '../../lib/design';
 import {
@@ -228,7 +229,7 @@ function isoToDatetimeLocal(s) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function ProfileModal({ open, onClose, userEmail, onSignOut }) {
+function ProfileModal({ open, onClose, userEmail, onSignOut, isPro }) {
   if (!open) return null;
 
   return (
@@ -244,7 +245,14 @@ function ProfileModal({ open, onClose, userEmail, onSignOut }) {
         <div style={{ ...DS.card, marginBottom: '12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '14px', color: '#666' }}>Plan</span>
-            <span style={{ ...DS.pill, background: '#eeeae0', color: '#666', cursor: 'default' }}>Free</span>
+            <span style={{
+              ...DS.pill,
+              background: isPro ? TEAL_LIGHT : '#eeeae0',
+              color: isPro ? BRAND : '#666',
+              cursor: 'default',
+            }}>
+              {isPro ? 'Pro' : 'Free'}
+            </span>
           </div>
         </div>
         <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#888', textAlign: 'center' }}>
@@ -565,6 +573,12 @@ export default function Helmr() {
     return () => subscription.unsubscribe();
   }, []);
 
+  const refreshSession = useCallback(async () => {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (refreshed) setSession(refreshed);
+    return refreshed;
+  }, []);
+
   if (!authReady) {
     return (
       <div style={{ ...DS.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -581,10 +595,10 @@ export default function Helmr() {
     return <AuthScreen onSession={setSession} />;
   }
 
-  return <HelmrApp session={session} />;
+  return <HelmrApp session={session} refreshSession={refreshSession} />;
 }
 
-function HelmrApp({ session }) {
+function HelmrApp({ session, refreshSession }) {
   const [screen, setScreen] = useState('welcome');
   const [navDirection, setNavDirection] = useState('forward');
   const [successOverlay, setSuccessOverlay] = useState(false);
@@ -715,6 +729,15 @@ function HelmrApp({ session }) {
     setToast(message);
     toastTimerRef.current = setTimeout(() => setToast(null), 3000);
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('upgraded') !== 'true') return;
+    window.history.replaceState({}, '', '/app');
+    refreshSession?.().then((refreshed) => {
+      if (isProUser(refreshed?.user)) showToast('Welcome to Pro!');
+    });
+  }, [refreshSession]);
 
   const handleBellClick = () => {
     if (showBellBadge) setBellDismissed(true);
@@ -1112,6 +1135,7 @@ function HelmrApp({ session }) {
   };
 
   const checkEventLimit = async () => {
+    if (isProUser(session.user)) return { blocked: false };
     const count = await countUserEvents();
     return { blocked: count >= 1 };
   };
@@ -2832,6 +2856,7 @@ function HelmrApp({ session }) {
         open={profileOpen}
         onClose={() => setProfileOpen(false)}
         userEmail={session.user.email}
+        isPro={isProUser(session.user)}
         onSignOut={async () => {
           await supabase.auth.signOut();
           setProfileOpen(false);
