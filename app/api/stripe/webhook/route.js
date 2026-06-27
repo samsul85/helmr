@@ -4,17 +4,11 @@ import { getStripe } from '@/lib/stripe';
 
 export const runtime = 'nodejs';
 
-const supabaseUrl = 'https://vckmiesiybrtgfphprqh.supabase.co';
-
-function getSupabaseAdmin() {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!serviceRoleKey) {
-    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
-  }
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+const supabaseAdmin = createClient(
+  'https://vckmiesiybrtgfphprqh.supabase.co',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || 'PASTE_SERVICE_ROLE_KEY_HERE',
+  { auth: { autoRefreshToken: false, persistSession: false } },
+);
 
 export async function POST(request) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -38,6 +32,8 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
+  console.log('[stripe/webhook] received event:', event.type);
+
   if (event.type !== 'checkout.session.completed') {
     return NextResponse.json({ received: true }, { status: 200 });
   }
@@ -52,7 +48,6 @@ export async function POST(request) {
   }
 
   try {
-    const supabaseAdmin = getSupabaseAdmin();
     const { error } = await supabaseAdmin.auth.admin.updateUserById(supabaseUserId, {
       user_metadata: {
         plan: 'pro',
@@ -69,7 +64,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
     }
 
-    console.error('[stripe/webhook] user upgraded to pro', {
+    console.log('[stripe/webhook] user upgraded to pro', {
       userId: supabaseUserId,
       planInterval,
     });
