@@ -6,7 +6,6 @@ export const dynamic = 'force-dynamic';
 export default async function GuestPage({ params, searchParams }) {
   const event = await getEvent(params.eventId);
   const guestId = searchParams?.g || null;
-  const preview = searchParams?.preview === '1';
 
   if (!event) {
     return (
@@ -20,5 +19,5 @@ export default async function GuestPage({ params, searchParams }) {
     );
   }
 
-  return <GuestView event={event} guestId={guestId} preview={preview} />;
+  return <GuestView event={event} guestId={guestId} />;
 }
