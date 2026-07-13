@@ -482,42 +482,55 @@ export default function LandingPage() {
   return (
     <div style={S.page}>
       <div style={S.aurora}>
-        <style>{`
-          @keyframes drift1 {
-            0%, 100% { transform: translate(0%, 0%) scale(1); }
-            33% { transform: translate(20%, -15%) scale(1.1); }
-            66% { transform: translate(-10%, 20%) scale(0.95); }
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes helmr-drift1 {
+            0%   { transform: translate(0px, 0px) scale(1); }
+            25%  { transform: translate(120px, -80px) scale(1.1); }
+            50%  { transform: translate(60px, 100px) scale(0.95); }
+            75%  { transform: translate(-60px, 40px) scale(1.05); }
+            100% { transform: translate(0px, 0px) scale(1); }
           }
-          @keyframes drift2 {
-            0%, 100% { transform: translate(0%, 0%) scale(1); }
-            33% { transform: translate(-25%, 15%) scale(1.05); }
-            66% { transform: translate(15%, -20%) scale(1.1); }
+          @keyframes helmr-drift2 {
+            0%   { transform: translate(0px, 0px) scale(1); }
+            33%  { transform: translate(-140px, 80px) scale(1.08); }
+            66%  { transform: translate(80px, -100px) scale(0.92); }
+            100% { transform: translate(0px, 0px) scale(1); }
           }
-          @keyframes drift3 {
-            0%, 100% { transform: translate(0%, 0%) scale(1); }
-            50% { transform: translate(10%, 25%) scale(1.08); }
+          @keyframes helmr-drift3 {
+            0%   { transform: translate(0px, 0px) scale(1); }
+            50%  { transform: translate(60px, 140px) scale(1.12); }
+            100% { transform: translate(0px, 0px) scale(1); }
           }
-        `}</style>
+        `}} />
         <div style={{
           position: 'absolute', width: '70vw', height: '70vw', maxWidth: '800px', maxHeight: '800px',
           borderRadius: '50%', top: '-20%', left: '-10%',
           background: 'radial-gradient(circle, rgba(15,110,86,0.28) 0%, transparent 70%)',
           filter: 'blur(60px)',
-          animation: 'drift1 20s ease-in-out infinite',
+          animationName: 'helmr-drift1',
+          animationDuration: '20s',
+          animationTimingFunction: 'ease-in-out',
+          animationIterationCount: 'infinite',
         }}/>
         <div style={{
           position: 'absolute', width: '60vw', height: '60vw', maxWidth: '700px', maxHeight: '700px',
           borderRadius: '50%', top: '20%', right: '-15%',
           background: 'radial-gradient(circle, rgba(26,158,120,0.2) 0%, transparent 70%)',
           filter: 'blur(80px)',
-          animation: 'drift2 26s ease-in-out infinite',
+          animationName: 'helmr-drift2',
+          animationDuration: '26s',
+          animationTimingFunction: 'ease-in-out',
+          animationIterationCount: 'infinite',
         }}/>
         <div style={{
           position: 'absolute', width: '50vw', height: '50vw', maxWidth: '600px', maxHeight: '600px',
           borderRadius: '50%', bottom: '10%', left: '30%',
           background: 'radial-gradient(circle, rgba(10,77,58,0.22) 0%, transparent 70%)',
           filter: 'blur(70px)',
-          animation: 'drift3 32s ease-in-out infinite',
+          animationName: 'helmr-drift3',
+          animationDuration: '32s',
+          animationTimingFunction: 'ease-in-out',
+          animationIterationCount: 'infinite',
         }}/>
       </div>
       <div style={S.pageContent}>
@@ -547,7 +560,7 @@ export default function LandingPage() {
             Try Helmr free
           </a>
           <a
-            href="/contact"
+            href="mailto:sam@helmr.ca?subject=Question about Helmr"
             style={S.btnSecondary}
             onClick={() => track('feedback')}
           >
