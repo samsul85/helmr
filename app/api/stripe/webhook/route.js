@@ -4,12 +4,6 @@ import { getStripe } from '@/lib/stripe';
 
 export const runtime = 'nodejs';
 
-const supabaseAdmin = createClient(
-  'https://vckmiesiybrtgfphprqh.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } },
-);
-
 export async function POST(request) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
@@ -47,8 +41,15 @@ export async function POST(request) {
     return NextResponse.json({ received: true }, { status: 200 });
   }
 
+  const supabaseAdmin = createClient(
+    'https://vckmiesiybrtgfphprqh.supabase.co',
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
   try {
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(supabaseUserId, {
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(
+      supabaseUserId, {
       user_metadata: {
         plan: 'pro',
         plan_interval: planInterval,
