@@ -547,7 +547,7 @@ export default function LandingPage() {
             Try Helmr free
           </a>
           <a
-            href="mailto:sam@helmr.ca?subject=Question about Helmr"
+            href="/contact"
             style={S.btnSecondary}
             onClick={() => track('feedback')}
           >
