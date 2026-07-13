@@ -1,3 +1,4 @@
+import './globals.css';
 import { Analytics } from '@vercel/analytics/next';
 import { Suspense } from 'react';
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration';
