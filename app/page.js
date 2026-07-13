@@ -100,7 +100,7 @@ const S = {
   },
   subhead: {
     fontSize: 'clamp(16px, 2vw, 20px)',
-    color: '#888',
+    color: '#bbb',
     lineHeight: 1.6,
     margin: '0 0 40px',
     maxWidth: '520px',
@@ -180,7 +180,7 @@ const S = {
   },
   videoLabel: {
     fontSize: '14px',
-    color: '#555',
+    color: '#888',
     letterSpacing: '0.02em',
   },
   divider: {
@@ -199,7 +199,7 @@ const S = {
   },
   sectionLabel: {
     fontSize: '12px',
-    color: '#555',
+    color: '#aaa',
     fontWeight: 600,
     letterSpacing: '0.12em',
     textTransform: 'uppercase',
@@ -233,7 +233,7 @@ const S = {
   },
   stepDesc: {
     fontSize: '14px',
-    color: '#666',
+    color: '#999',
     lineHeight: 1.6,
     margin: 0,
   },
@@ -269,7 +269,7 @@ const S = {
   },
   featureDesc: {
     fontSize: '14px',
-    color: '#555',
+    color: '#999',
     lineHeight: 1.6,
     margin: 0,
   },
@@ -290,7 +290,7 @@ const S = {
   },
   pricingSub: {
     textAlign: 'center',
-    color: '#555',
+    color: '#aaa',
     fontSize: '15px',
     margin: '0 0 48px',
   },
@@ -330,7 +330,7 @@ const S = {
   },
   pricingPriceNote: {
     fontSize: '13px',
-    color: '#555',
+    color: '#999',
     margin: '0 0 28px',
     minHeight: '20px',
   },
@@ -345,7 +345,7 @@ const S = {
   },
   pricingFeature: {
     fontSize: '14px',
-    color: '#888',
+    color: '#ccc',
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
@@ -384,12 +384,12 @@ const S = {
     padding: '32px 24px',
     textAlign: 'center',
     fontSize: '12px',
-    color: '#444',
+    color: '#777',
     borderTop: '1px solid rgba(255,255,255,0.07)',
     marginTop: 'auto',
   },
   footerLink: {
-    color: '#555',
+    color: '#888',
     textDecoration: 'none',
     margin: '0 8px',
   },
