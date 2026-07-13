@@ -8,12 +8,30 @@ const WAITLIST_URL = 'https://forms.gle/N1Hj3eh2VGiTApVi7';
 const S = {
   page: {
     minHeight: '100vh',
-    background: '#0a0a0a',
+    background: 'linear-gradient(160deg, #020d0a 0%, #041a12 40%, #071f18 70%, #030e0b 100%)',
     color: '#f0ede8',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     display: 'flex',
     flexDirection: 'column',
     overflowX: 'hidden',
+    position: 'relative',
+  },
+  aurora: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    pointerEvents: 'none',
+    zIndex: 0,
+    overflow: 'hidden',
+  },
+  pageContent: {
+    position: 'relative',
+    zIndex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: '100vh',
   },
   nav: {
     padding: '20px 32px',
@@ -141,9 +159,9 @@ const S = {
   videoPlaceholder: {
     width: '100%',
     aspectRatio: '16/9',
-    background: '#111',
+    background: 'rgba(255,255,255,0.04)',
     borderRadius: '16px',
-    border: '1px solid #1e1e1e',
+    border: '1px solid rgba(255,255,255,0.08)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -167,7 +185,7 @@ const S = {
   },
   divider: {
     height: '1px',
-    background: '#1a1a1a',
+    background: 'rgba(255,255,255,0.06)',
     maxWidth: '1100px',
     margin: '0 auto',
     width: 'calc(100% - 48px)',
@@ -193,7 +211,7 @@ const S = {
     gap: '2px',
   },
   step: {
-    background: '#111',
+    background: 'rgba(255,255,255,0.04)',
     padding: '32px',
     display: 'flex',
     flexDirection: 'column',
@@ -232,7 +250,7 @@ const S = {
     gap: '16px',
   },
   featureCard: {
-    background: '#0f0f0f',
+    background: 'rgba(255,255,255,0.04)',
     borderRadius: '12px',
     padding: '28px',
     border: '1px solid #1a1a1a',
@@ -289,8 +307,8 @@ const S = {
     boxSizing: 'border-box',
   },
   pricingCardFree: {
-    background: '#0f0f0f',
-    border: '1px solid #1a1a1a',
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(255,255,255,0.08)',
   },
   pricingCardPro: {
     background: '#0a1f1a',
@@ -367,7 +385,7 @@ const S = {
     textAlign: 'center',
     fontSize: '12px',
     color: '#444',
-    borderTop: '1px solid #1a1a1a',
+    borderTop: '1px solid rgba(255,255,255,0.07)',
     marginTop: 'auto',
   },
   footerLink: {
@@ -463,6 +481,40 @@ export default function LandingPage() {
 
   return (
     <div style={S.page}>
+      <div style={S.aurora}>
+        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" style={{position:'absolute',top:0,left:0}}>
+          <defs>
+            <radialGradient id="a1" cx="30%" cy="40%" r="60%">
+              <stop offset="0%" stopColor="#0F6E56" stopOpacity="0.35">
+                <animate attributeName="cx" values="30%;60%;30%" dur="18s" repeatCount="indefinite"/>
+                <animate attributeName="cy" values="40%;25%;40%" dur="18s" repeatCount="indefinite"/>
+              </stop>
+              <stop offset="100%" stopColor="#0F6E56" stopOpacity="0"/>
+            </radialGradient>
+            <radialGradient id="a2" cx="70%" cy="60%" r="55%">
+              <stop offset="0%" stopColor="#1a9e78" stopOpacity="0.25">
+                <animate attributeName="cx" values="70%;35%;70%" dur="24s" repeatCount="indefinite"/>
+                <animate attributeName="cy" values="60%;75%;60%" dur="24s" repeatCount="indefinite"/>
+              </stop>
+              <stop offset="100%" stopColor="#1a9e78" stopOpacity="0"/>
+            </radialGradient>
+            <radialGradient id="a3" cx="50%" cy="20%" r="50%">
+              <stop offset="0%" stopColor="#0a4d3a" stopOpacity="0.4">
+                <animate attributeName="cx" values="50%;80%;50%" dur="30s" repeatCount="indefinite"/>
+                <animate attributeName="cy" values="20%;55%;20%" dur="30s" repeatCount="indefinite"/>
+              </stop>
+              <stop offset="100%" stopColor="#0a4d3a" stopOpacity="0"/>
+            </radialGradient>
+            <filter id="blur">
+              <feGaussianBlur stdDeviation="40"/>
+            </filter>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#a3)" filter="url(#blur)"/>
+          <rect width="100%" height="100%" fill="url(#a1)" filter="url(#blur)"/>
+          <rect width="100%" height="100%" fill="url(#a2)" filter="url(#blur)"/>
+        </svg>
+      </div>
+      <div style={S.pageContent}>
       <nav style={S.nav}>
         <img src="/logo.svg" alt="Helmr" style={S.brand} />
         <a href="/app" style={S.navLink} onClick={() => track('nav_open_app')}>
@@ -617,6 +669,7 @@ export default function LandingPage() {
           © {new Date().getFullYear()} Helmr
         </div>
       </footer>
+      </div>
     </div>
   );
 }
