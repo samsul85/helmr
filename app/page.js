@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 const WAITLIST_URL = 'https://forms.gle/N1Hj3eh2VGiTApVi7';
@@ -16,16 +16,7 @@ const S = {
     overflowX: 'hidden',
     position: 'relative',
   },
-  aurora: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    pointerEvents: 'none',
-    zIndex: 0,
-    overflow: 'hidden',
-  },
+
   pageContent: {
     position: 'relative',
     zIndex: 1,
@@ -454,6 +445,77 @@ const featuresList = [
   },
 ];
 
+
+function AuroraCanvas() {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const blobs = [
+      { x: 0.2, y: 0.2, r: 0.4, color: 'rgba(15,110,86,0.28)', speed: 0.00018, ox: 0.12, oy: 0.10 },
+      { x: 0.75, y: 0.5, r: 0.35, color: 'rgba(26,158,120,0.18)', speed: 0.00013, ox: 0.14, oy: 0.12 },
+      { x: 0.5, y: 0.8, r: 0.3, color: 'rgba(10,77,58,0.22)', speed: 0.00010, ox: 0.08, oy: 0.15 },
+    ];
+
+    let frame;
+    const draw = (t) => {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      blobs.forEach((b) => {
+        const cx = (b.x + Math.sin(t * b.speed) * b.ox) * w;
+        const cy = (b.y + Math.cos(t * b.speed * 0.7) * b.oy) * h;
+        const radius = b.r * Math.min(w, h);
+
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+        grad.addColorStop(0, b.color);
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.filter = 'blur(40px)';
+        ctx.fill();
+        ctx.filter = 'none';
+      });
+
+      frame = requestAnimationFrame(draw);
+    };
+
+    frame = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+        zIndex: 0,
+      }}
+    />
+  );
+}
+
 export default function LandingPage() {
   useEffect(() => {
     const hashParams = new URLSearchParams(window.location.hash.slice(1));
@@ -481,58 +543,7 @@ export default function LandingPage() {
 
   return (
     <div style={S.page}>
-      <div style={S.aurora}>
-        <style dangerouslySetInnerHTML={{__html: `
-          @keyframes helmr-drift1 {
-            0%   { transform: translate(0px, 0px) scale(1); }
-            25%  { transform: translate(120px, -80px) scale(1.1); }
-            50%  { transform: translate(60px, 100px) scale(0.95); }
-            75%  { transform: translate(-60px, 40px) scale(1.05); }
-            100% { transform: translate(0px, 0px) scale(1); }
-          }
-          @keyframes helmr-drift2 {
-            0%   { transform: translate(0px, 0px) scale(1); }
-            33%  { transform: translate(-140px, 80px) scale(1.08); }
-            66%  { transform: translate(80px, -100px) scale(0.92); }
-            100% { transform: translate(0px, 0px) scale(1); }
-          }
-          @keyframes helmr-drift3 {
-            0%   { transform: translate(0px, 0px) scale(1); }
-            50%  { transform: translate(60px, 140px) scale(1.12); }
-            100% { transform: translate(0px, 0px) scale(1); }
-          }
-        `}} />
-        <div style={{
-          position: 'absolute', width: '70vw', height: '70vw', maxWidth: '800px', maxHeight: '800px',
-          borderRadius: '50%', top: '-20%', left: '-10%',
-          background: 'radial-gradient(circle, rgba(15,110,86,0.28) 0%, transparent 70%)',
-          filter: 'blur(60px)',
-          animationName: 'helmr-drift1',
-          animationDuration: '20s',
-          animationTimingFunction: 'ease-in-out',
-          animationIterationCount: 'infinite',
-        }}/>
-        <div style={{
-          position: 'absolute', width: '60vw', height: '60vw', maxWidth: '700px', maxHeight: '700px',
-          borderRadius: '50%', top: '20%', right: '-15%',
-          background: 'radial-gradient(circle, rgba(26,158,120,0.2) 0%, transparent 70%)',
-          filter: 'blur(80px)',
-          animationName: 'helmr-drift2',
-          animationDuration: '26s',
-          animationTimingFunction: 'ease-in-out',
-          animationIterationCount: 'infinite',
-        }}/>
-        <div style={{
-          position: 'absolute', width: '50vw', height: '50vw', maxWidth: '600px', maxHeight: '600px',
-          borderRadius: '50%', bottom: '10%', left: '30%',
-          background: 'radial-gradient(circle, rgba(10,77,58,0.22) 0%, transparent 70%)',
-          filter: 'blur(70px)',
-          animationName: 'helmr-drift3',
-          animationDuration: '32s',
-          animationTimingFunction: 'ease-in-out',
-          animationIterationCount: 'infinite',
-        }}/>
-      </div>
+      <AuroraCanvas />
       <div style={S.pageContent}>
       <nav style={S.nav}>
         <img src="/logo.svg" alt="Helmr" style={S.brand} />
