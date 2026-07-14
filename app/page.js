@@ -447,72 +447,69 @@ const featuresList = [
 
 
 function AuroraCanvas() {
-  const canvasRef = useRef(null);
+  const ref1 = useRef(null);
+  const ref2 = useRef(null);
+  const ref3 = useRef(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    resize();
-    window.addEventListener('resize', resize);
-
-    const blobs = [
-      { x: 0.2, y: 0.2, r: 0.4, color: 'rgba(15,110,86,0.28)', speed: 0.00018, ox: 0.12, oy: 0.10 },
-      { x: 0.75, y: 0.5, r: 0.35, color: 'rgba(26,158,120,0.18)', speed: 0.00013, ox: 0.14, oy: 0.12 },
-      { x: 0.5, y: 0.8, r: 0.3, color: 'rgba(10,77,58,0.22)', speed: 0.00010, ox: 0.08, oy: 0.15 },
-    ];
-
     let frame;
-    const draw = (t) => {
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-
-      blobs.forEach((b) => {
-        const cx = (b.x + Math.sin(t * b.speed) * b.ox) * w;
-        const cy = (b.y + Math.cos(t * b.speed * 0.7) * b.oy) * h;
-        const radius = b.r * Math.min(w, h);
-
-        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-        grad.addColorStop(0, b.color);
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
-
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
-        ctx.filter = 'blur(40px)';
-        ctx.fill();
-        ctx.filter = 'none';
-      });
-
-      frame = requestAnimationFrame(draw);
+    const animate = (t) => {
+      const s = t / 1000;
+      if (ref1.current) {
+        const x = Math.sin(s * 0.3) * 120;
+        const y = Math.cos(s * 0.2) * 90;
+        ref1.current.style.transform = `translate(${x}px, ${y}px)`;
+      }
+      if (ref2.current) {
+        const x = Math.sin(s * 0.18 + 1) * 140;
+        const y = Math.cos(s * 0.25 + 2) * 100;
+        ref2.current.style.transform = `translate(${x}px, ${y}px)`;
+      }
+      if (ref3.current) {
+        const x = Math.sin(s * 0.13 + 3) * 100;
+        const y = Math.cos(s * 0.15 + 1) * 130;
+        ref3.current.style.transform = `translate(${x}px, ${y}px)`;
+      }
+      frame = requestAnimationFrame(animate);
     };
-
-    frame = requestAnimationFrame(draw);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('resize', resize);
-    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
   }, []);
 
+  const blobBase = {
+    position: 'fixed',
+    borderRadius: '50%',
+    pointerEvents: 'none',
+    willChange: 'transform',
+  };
+
   return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        pointerEvents: 'none',
+    <>
+      <div ref={ref1} style={{
+        ...blobBase,
+        width: '700px', height: '700px',
+        top: '-200px', left: '-150px',
+        background: 'radial-gradient(circle, rgba(15,110,86,0.35) 0%, transparent 70%)',
+        filter: 'blur(80px)',
         zIndex: 0,
-      }}
-    />
+      }}/>
+      <div ref={ref2} style={{
+        ...blobBase,
+        width: '600px', height: '600px',
+        top: '20%', right: '-200px',
+        background: 'radial-gradient(circle, rgba(26,158,120,0.25) 0%, transparent 70%)',
+        filter: 'blur(90px)',
+        zIndex: 0,
+      }}/>
+      <div ref={ref3} style={{
+        ...blobBase,
+        width: '500px', height: '500px',
+        bottom: '-100px', left: '25%',
+        background: 'radial-gradient(circle, rgba(10,77,58,0.28) 0%, transparent 70%)',
+        filter: 'blur(70px)',
+        zIndex: 0,
+      }}/>
+    </>
   );
 }
 
