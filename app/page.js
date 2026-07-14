@@ -456,13 +456,13 @@ function AuroraCanvas() {
     return () => clearInterval(interval);
   }, []);
 
-  const s = t * 0.05;
-  const x1 = Math.sin(s * 0.3) * 120;
-  const y1 = Math.cos(s * 0.2) * 90;
-  const x2 = Math.sin(s * 0.18 + 1) * 140;
-  const y2 = Math.cos(s * 0.25 + 2) * 100;
-  const x3 = Math.sin(s * 0.13 + 3) * 100;
-  const y3 = Math.cos(s * 0.15 + 1) * 130;
+  const s = t * 0.15;
+  const x1 = Math.sin(s * 0.3) * 260;
+  const y1 = Math.cos(s * 0.2) * 200;
+  const x2 = Math.sin(s * 0.18 + 1) * 300;
+  const y2 = Math.cos(s * 0.25 + 2) * 220;
+  const x3 = Math.sin(s * 0.13 + 3) * 220;
+  const y3 = Math.cos(s * 0.15 + 1) * 280;
 
   const blobBase = {
     position: 'fixed',
