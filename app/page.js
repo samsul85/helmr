@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 const WAITLIST_URL = 'https://forms.gle/N1Hj3eh2VGiTApVi7';
@@ -447,66 +447,56 @@ const featuresList = [
 
 
 function AuroraCanvas() {
-  const ref1 = useRef(null);
-  const ref2 = useRef(null);
-  const ref3 = useRef(null);
+  const [t, setT] = useState(0);
 
   useEffect(() => {
-    let frame;
-    const animate = (t) => {
-      const s = t / 1000;
-      if (ref1.current) {
-        const x = Math.sin(s * 0.3) * 120;
-        const y = Math.cos(s * 0.2) * 90;
-        ref1.current.style.transform = `translate(${x}px, ${y}px)`;
-      }
-      if (ref2.current) {
-        const x = Math.sin(s * 0.18 + 1) * 140;
-        const y = Math.cos(s * 0.25 + 2) * 100;
-        ref2.current.style.transform = `translate(${x}px, ${y}px)`;
-      }
-      if (ref3.current) {
-        const x = Math.sin(s * 0.13 + 3) * 100;
-        const y = Math.cos(s * 0.15 + 1) * 130;
-        ref3.current.style.transform = `translate(${x}px, ${y}px)`;
-      }
-      frame = requestAnimationFrame(animate);
-    };
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
+    const interval = setInterval(() => {
+      setT((prev) => prev + 1);
+    }, 50);
+    return () => clearInterval(interval);
   }, []);
+
+  const s = t * 0.05;
+  const x1 = Math.sin(s * 0.3) * 120;
+  const y1 = Math.cos(s * 0.2) * 90;
+  const x2 = Math.sin(s * 0.18 + 1) * 140;
+  const y2 = Math.cos(s * 0.25 + 2) * 100;
+  const x3 = Math.sin(s * 0.13 + 3) * 100;
+  const y3 = Math.cos(s * 0.15 + 1) * 130;
 
   const blobBase = {
     position: 'fixed',
     borderRadius: '50%',
     pointerEvents: 'none',
-    willChange: 'transform',
   };
 
   return (
     <>
-      <div ref={ref1} style={{
+      <div style={{
         ...blobBase,
         width: '700px', height: '700px',
         top: '-200px', left: '-150px',
         background: 'radial-gradient(circle, rgba(15,110,86,0.35) 0%, transparent 70%)',
         filter: 'blur(80px)',
+        transform: `translate(${x1}px, ${y1}px)`,
         zIndex: 0,
       }}/>
-      <div ref={ref2} style={{
+      <div style={{
         ...blobBase,
         width: '600px', height: '600px',
         top: '20%', right: '-200px',
         background: 'radial-gradient(circle, rgba(26,158,120,0.25) 0%, transparent 70%)',
         filter: 'blur(90px)',
+        transform: `translate(${x2}px, ${y2}px)`,
         zIndex: 0,
       }}/>
-      <div ref={ref3} style={{
+      <div style={{
         ...blobBase,
         width: '500px', height: '500px',
         bottom: '-100px', left: '25%',
         background: 'radial-gradient(circle, rgba(10,77,58,0.28) 0%, transparent 70%)',
         filter: 'blur(70px)',
+        transform: `translate(${x3}px, ${y3}px)`,
         zIndex: 0,
       }}/>
     </>
