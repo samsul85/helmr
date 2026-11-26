@@ -19,5 +19,16 @@ export default async function GuestPage({ params, searchParams }) {
     );
   }
 
-  return <GuestView event={event} guestId={guestId} />;
+  // Every guest's browser receives this event, so strip other guests' emails.
+  // A guest only ever sees their own.
+  const safeEvent = {
+    ...event,
+    people: (event.people || []).map(p => {
+      if (!p.email || p.id === guestId) return p;
+      const { email, ...rest } = p;
+      return rest;
+    }),
+  };
+
+  return <GuestView event={safeEvent} guestId={guestId} />;
 }
