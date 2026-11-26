@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { setGuestContribution, addBroadcastContribution } from '@/lib/events';
-import { createOrganizerNotificationEmail, sendEmail } from '@/lib/email';
+import { createOrganizerNotificationEmail, createGuestContributionConfirmedEmail, sendEmail } from '@/lib/email';
 import { sendOrganizerPush } from '@/lib/push';
 
 export const runtime = 'nodejs';
@@ -17,6 +17,17 @@ async function pushOrganizer(event, message, eventId) {
     });
   } catch (err) {
     console.error('Organizer push failed:', err);
+  }
+}
+
+// Email the guest their pledge + e-Transfer details (only if they gave an email).
+async function emailGuestPledge(event, guest) {
+  const email = createGuestContributionConfirmedEmail({ event, guest });
+  if (!email) return;
+  try {
+    await sendEmail(email);
+  } catch (err) {
+    console.error('Guest contribution email failed:', err);
   }
 }
 
@@ -38,6 +49,7 @@ export async function POST(request, { params }) {
         return NextResponse.json({ error: 'Event is closed to new joiners.' }, { status: 410 });
       }
       const guest = result.people?.find(p => p.id === guestId);
+      await emailGuestPledge(result, guest);
       await pushOrganizer(
         result,
         `${guest?.name || 'A guest'} contributed $${Math.round(amt).toLocaleString()}`,
@@ -70,6 +82,7 @@ export async function POST(request, { params }) {
         console.error('Broadcast contribution notification email failed:', emailError);
       }
     }
+    await emailGuestPledge(result.event, guest);
     await pushOrganizer(
       result.event,
       `${guest?.name || cleanName} contributed $${Math.round(amt).toLocaleString()}`,
