@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getEvent, updateEvent } from '@/lib/events';
+import { getEvent, updateEvent, cleanGuestEmail } from '@/lib/events';
 import { createOrganizerNotificationEmail, sendEmail } from '@/lib/email';
+import { sendOrganizerPush } from '@/lib/push';
 
 export const runtime = 'nodejs';
 
@@ -21,9 +22,11 @@ function guestIsAlreadyIn(guest) {
 
 export async function POST(request, { params }) {
   try {
-    const { guestId, status, customFieldValue } = await request.json();
+    const { guestId, status, customFieldValue, email: guestEmailInput } = await request.json();
     if (!guestId) return NextResponse.json({ error: 'guestId required' }, { status: 400 });
     if (!VALID.has(status)) return NextResponse.json({ error: 'invalid status' }, { status: 400 });
+
+    const cleanEmail = cleanGuestEmail(guestEmailInput);
 
     const event = await getEvent(params.eventId);
     if (!event) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -43,10 +46,12 @@ export async function POST(request, { params }) {
       if (p.status === 'paid' && status === 'confirmed') {
         const next = { ...p };
         if (cleanCustom !== undefined) next.customFieldValue = cleanCustom;
+        if (cleanEmail) next.email = cleanEmail;
         return next;
       }
       const next = { ...p, status, rsvpAt: Date.now() };
       if (cleanCustom !== undefined) next.customFieldValue = cleanCustom;
+      if (cleanEmail) next.email = cleanEmail;
       return next;
     });
 
@@ -62,6 +67,19 @@ export async function POST(request, { params }) {
         await sendEmail(email);
       } catch (emailError) {
         console.error('RSVP notification email failed:', emailError);
+      }
+    }
+
+    if (updated.ownerId) {
+      try {
+        await sendOrganizerPush({
+          ownerId: updated.ownerId,
+          title: updated.eventName || 'Helmr',
+          body: `${guest?.name || 'A guest'} RSVP'd: ${guest?.status || status}`,
+          data: { eventId: params.eventId, title: updated.eventName },
+        });
+      } catch (pushError) {
+        console.error('RSVP organizer push failed:', pushError);
       }
     }
 

@@ -1,13 +1,29 @@
 import { NextResponse } from 'next/server';
 import { setGuestContribution, addBroadcastContribution } from '@/lib/events';
 import { createOrganizerNotificationEmail, sendEmail } from '@/lib/email';
+import { sendOrganizerPush } from '@/lib/push';
 
 export const runtime = 'nodejs';
+
+// Fire-and-forget organizer push; never let a push problem fail the guest action.
+async function pushOrganizer(event, message, eventId) {
+  if (!event?.ownerId) return;
+  try {
+    await sendOrganizerPush({
+      ownerId: event.ownerId,
+      title: event.eventName || 'Helmr',
+      body: message,
+      data: { eventId, title: event.eventName },
+    });
+  } catch (err) {
+    console.error('Organizer push failed:', err);
+  }
+}
 
 export async function POST(request, { params }) {
   try {
     const body = await request.json();
-    const { guestId, name, amount, customFieldValue } = body || {};
+    const { guestId, name, amount, customFieldValue, email: guestEmailInput } = body || {};
 
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt < 0) {
@@ -16,11 +32,17 @@ export async function POST(request, { params }) {
 
     if (guestId) {
       // Personal-link or returning-broadcast guest: update existing record
-      const result = await setGuestContribution(params.eventId, guestId, amt, customFieldValue);
+      const result = await setGuestContribution(params.eventId, guestId, amt, customFieldValue, guestEmailInput);
       if (!result) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       if (result.closed) {
         return NextResponse.json({ error: 'Event is closed to new joiners.' }, { status: 410 });
       }
+      const guest = result.people?.find(p => p.id === guestId);
+      await pushOrganizer(
+        result,
+        `${guest?.name || 'A guest'} contributed $${Math.round(amt).toLocaleString()}`,
+        params.eventId,
+      );
       return NextResponse.json({ ok: true, guestId });
     }
 
@@ -30,7 +52,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'name required' }, { status: 400 });
     }
 
-    const result = await addBroadcastContribution(params.eventId, cleanName, amt, customFieldValue);
+    const result = await addBroadcastContribution(params.eventId, cleanName, amt, customFieldValue, guestEmailInput);
     if (!result) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     if (result.closed) {
       return NextResponse.json({ error: 'Event is closed to new contributions.' }, { status: 410 });
@@ -48,6 +70,11 @@ export async function POST(request, { params }) {
         console.error('Broadcast contribution notification email failed:', emailError);
       }
     }
+    await pushOrganizer(
+      result.event,
+      `${guest?.name || cleanName} contributed $${Math.round(amt).toLocaleString()}`,
+      params.eventId,
+    );
 
     return NextResponse.json({ ok: true, guestId: result.guestId });
   } catch (err) {

@@ -166,6 +166,9 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
   const hasCustomField = customFieldLabel.length > 0;
   const [customFieldValue, setCustomFieldValue] = useState(initialGuest?.customFieldValue || '');
 
+  // Optional email so the organizer can send this guest event updates (opt-in).
+  const [guestEmail, setGuestEmail] = useState(initialGuest?.email || '');
+
   // Response deadline — lenient mode:
   //   - Already-confirmed / paid / declined / pledged guests retain full access.
   //   - New joiners (no record yet, or status='invited' with no contribution) are blocked.
@@ -294,6 +297,7 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
           guestId,
           status: newStatus,
           customFieldValue: hasCustomField ? customFieldValue.trim() : undefined,
+          email: guestEmail.trim() || undefined,
         }),
       });
       if (res.status === 410) {
@@ -337,6 +341,7 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
             name,
             amount: amt,
             customFieldValue: hasCustomField ? customFieldValue.trim() : undefined,
+            email: guestEmail.trim() || undefined,
           }),
         });
         if (res.status === 410) {
@@ -375,6 +380,7 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
           guestId,
           amount: amt,
           customFieldValue: hasCustomField ? customFieldValue.trim() : undefined,
+          email: guestEmail.trim() || undefined,
         }),
       });
       if (res.status === 410) {
@@ -760,6 +766,19 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
                 </>
               )}
 
+              <label style={S.label}>
+                Email <span style={{ color: '#999', fontWeight: 400 }}>(optional — get updates about this event)</span>
+              </label>
+              <input
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                style={{ ...S.input, marginBottom: '12px' }}
+                value={guestEmail}
+                onChange={e => setGuestEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+
               <label style={S.label}>Amount</label>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '16px' }}>
                 <span style={{ fontSize: '20px', color: BRAND, fontWeight: 600 }}>$</span>
@@ -972,6 +991,24 @@ export default function GuestView({ event, guestId: initialGuestIdProp, preview 
               value={customFieldValue}
               onChange={e => setCustomFieldValue(e.target.value)}
               maxLength={80}
+            />
+            <p style={{ fontSize: '11px', color: '#999', margin: '6px 0 0' }}>Saved when you RSVP.</p>
+          </div>
+        )}
+
+        {guestId && !declined && (
+          <div style={S.card}>
+            <label style={S.label}>
+              Email <span style={{ color: '#999', fontWeight: 400 }}>(optional — get updates about this event)</span>
+            </label>
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              style={S.input}
+              value={guestEmail}
+              onChange={e => setGuestEmail(e.target.value)}
+              placeholder="you@example.com"
             />
             <p style={{ fontSize: '11px', color: '#999', margin: '6px 0 0' }}>Saved when you RSVP.</p>
           </div>

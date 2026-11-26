@@ -1039,6 +1039,60 @@ function HelmrApp({ session, refreshSession }) {
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [eventId, screen, eventName, eventDate, eventLoc, dateTBD, locTBD, organizerName, organizerEmail, mode, inviteMode, goal, suggestionAmount, suggestionUnit, customFieldLabel, notificationPreference, responseDeadline, people, expenses, tipsEnabled]);
 
+  // Deliberately email guests about an event update. This is the ONLY path that
+  // sets notifyGuests:true — the debounced autosave above never does, so routine
+  // edits don't spam guests. Recipients are deadline-gated server-side (before
+  // deadline → confirmed guests; after → paid), and only guests with an email.
+  const [notifying, setNotifying] = useState(false);
+  const notifyGuestsOfUpdate = async () => {
+    if (!eventId) return;
+    const iso = datetimeLocalToIso(responseDeadline);
+    const passed = iso ? new Date(iso).getTime() < Date.now() : false;
+    const guestsWithEmail = people.filter(p => p.role !== 'organizer' && p.email);
+    const recipients = guestsWithEmail.filter(p =>
+      passed ? p.status === 'paid' : (p.status === 'confirmed' || p.status === 'paid')
+    );
+    if (recipients.length === 0) {
+      await dlg.alert(passed
+        ? 'No paid guests have an email on file to notify.'
+        : 'No confirmed guests have an email on file to notify.');
+      return;
+    }
+    const n = recipients.length;
+    const confirmed = await dlg.confirm(
+      `Email an event update to ${n} guest${n === 1 ? '' : 's'} (${passed ? 'paid' : 'confirmed'}, with an email on file)?`,
+      '',
+      { confirmLabel: 'Send update' },
+    );
+    if (!confirmed) return;
+    try {
+      setNotifying(true);
+      const res = await fetch(`/api/events/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventName, eventDate, eventLoc, dateTBD, locTBD,
+          organizerName, organizerEmail,
+          mode, inviteMode, goal: Number(goal) || 0,
+          suggestionAmount: Number(suggestionAmount) || 0, suggestionUnit,
+          customFieldLabel,
+          notificationPreference,
+          responseDeadline: iso,
+          people, expenses, tipsEnabled,
+          knownGuestIds: Array.from(knownGuestIdsRef.current),
+          notifyGuests: true,
+        }),
+      });
+      if (!res.ok) throw new Error('failed');
+      showToast(`Update sent to ${n} guest${n === 1 ? '' : 's'}`);
+    } catch (e) {
+      console.error('Notify guests failed', e);
+      await dlg.alert("Couldn't send the update. Please try again.");
+    } finally {
+      setNotifying(false);
+    }
+  };
+
   // Poll for server-side guest changes (viewedAt, RSVP status, broadcast signups, view counter)
   useEffect(() => {
     if (!eventId || screen !== 'dashboard') return;
@@ -2111,6 +2165,34 @@ function HelmrApp({ session, refreshSession }) {
                 <p style={{ fontSize: '12px', color: '#777', margin: '0 0 14px', padding: '10px 14px', background: '#f5f3ee', borderRadius: '14px' }}>
                   Contributors will show up here as people pledge from the shared link.
                 </p>
+              )}
+
+              {guests.some(p => p.email) && (
+                <button
+                  type="button"
+                  onClick={notifyGuestsOfUpdate}
+                  disabled={notifying}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    width: '100%',
+                    padding: '11px',
+                    marginBottom: '14px',
+                    borderRadius: '12px',
+                    border: `1px solid ${BRAND}`,
+                    background: TEAL_LIGHT,
+                    color: BRAND,
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: notifying ? 'default' : 'pointer',
+                    opacity: notifying ? 0.6 : 1,
+                  }}
+                >
+                  <i className="ti ti-mail" style={{ fontSize: '16px' }} />
+                  {notifying ? 'Sending…' : 'Notify guests of update'}
+                </button>
               )}
 
               {organizer && (
