@@ -1180,6 +1180,13 @@ function HelmrApp({ session, refreshSession }) {
     }));
   };
 
+  // One-tap "Paid?" nudge: e-Transfers land in the organizer's bank, so the app
+  // can't detect them. Confirmed guests get a reminder to check and mark paid.
+  const markPaid = (id) => {
+    setPeople(people.map(p => (p.id === id && p.role !== 'organizer') ? { ...p, status: 'paid' } : p));
+    trackEvent('guest_marked_paid_from_nudge');
+  };
+
   const openShareModal = () => {
     trackEvent('share_link_opened');
     setShareOpen(true);
@@ -2071,6 +2078,11 @@ function HelmrApp({ session, refreshSession }) {
             if (p.status === 'confirmed' || p.status === 'paid') return sum + shareAmt;
             return sum;
           }, 0);
+          // Guests who could have sent money but aren't marked paid yet.
+          // Cost Split hides payment details until the deadline passes, so no nudge before then.
+          const paymentOpen = mode === 'open_pool' || !deadlineDate || isNaN(deadlineDate.getTime()) || deadlinePassed;
+          const awaitingPayment = paymentOpen ? guests.filter(p => p.status === 'confirmed') : [];
+          const isAwaitingPayment = (p) => awaitingPayment.some(a => a.id === p.id);
 
           return (
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
@@ -2210,6 +2222,28 @@ function HelmrApp({ session, refreshSession }) {
                     )}
                   </div>
 
+                  {awaitingPayment.length > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '10px',
+                      padding: '12px 14px',
+                      marginBottom: '12px',
+                      borderRadius: '14px',
+                      background: '#fff6e5',
+                      border: '0.5px solid #f0d9a8',
+                      fontSize: '13px',
+                      color: '#6b4e16',
+                      lineHeight: 1.4,
+                    }}>
+                      <i className="ti ti-building-bank" style={{ fontSize: '18px', flexShrink: 0, marginTop: '1px' }} />
+                      <span>
+                        <strong>{awaitingPayment.length} {awaitingPayment.length === 1 ? 'person has' : 'people have'} confirmed but {awaitingPayment.length === 1 ? "isn't" : "aren't"} marked paid.</strong>{' '}
+                        Check your bank for their e-Transfers, then tap <strong>Paid?</strong> next to each name.
+                      </span>
+                    </div>
+                  )}
+
                   {guests.map(p => {
                     const c = STATUS_STYLES[p.status];
                     const contributed = Number(p.contributedAmount) || 0;
@@ -2281,6 +2315,28 @@ function HelmrApp({ session, refreshSession }) {
                             >
                               {statusLabel}
                             </button>
+                            {isAwaitingPayment(p) && (
+                              <button
+                                type="button"
+                                aria-label={`Mark ${p.name} as paid`}
+                                onClick={() => markPaid(p.id)}
+                                style={{
+                                  marginLeft: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  padding: '3px 10px',
+                                  borderRadius: '999px',
+                                  border: '1px dashed #d9a441',
+                                  background: '#fff6e5',
+                                  color: '#8a5a00',
+                                  cursor: 'pointer',
+                                  fontFamily: FONT,
+                                }}
+                              >
+                                <i className="ti ti-check" style={{ fontSize: '12px', marginRight: '3px', verticalAlign: '-1px' }} />
+                                Paid?
+                              </button>
+                            )}
                           </div>
                           {(showShareAmt || showPoolAmt) && (
                             <div style={{ textAlign: 'right', flexShrink: 0 }}>
